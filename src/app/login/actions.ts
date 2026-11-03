@@ -1,7 +1,11 @@
 "use server";
 
+import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { db } from "@/db/client";
+import { profiles } from "@/db/schema";
+import { homeFor } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 
 const credentials = z.object({
@@ -19,11 +23,13 @@ export async function signIn(_prev: SignInState, formData: FormData): Promise<Si
   if (!parsed.success) return { error: "Enter your email and password." };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword(parsed.data);
-  if (error) return { error: "That email and password don't match an account." };
+  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
+  if (error || !data.user) return { error: "That email and password don't match an account." };
 
-  // "/" lets proxy.ts route to the role's home with the fresh session.
-  redirect("/");
+  // Go straight to the role's home: a second redirect from "/" would leave the
+  // address bar on "/" while showing the home page.
+  const [profile] = await db.select({ role: profiles.role }).from(profiles).where(eq(profiles.id, data.user.id)).limit(1);
+  redirect(profile ? homeFor(profile.role) : "/");
 }
 
 export async function signOut() {

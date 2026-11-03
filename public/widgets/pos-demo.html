@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Point-of-sale demo</title>
+<style>
+  :root { color-scheme: light dark; font: 14px/1.4 system-ui, sans-serif; }
+  body { margin: 0; padding: 12px; }
+  h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; opacity: .6; }
+  .grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 16px; }
+  button, select { font: inherit; padding: 6px 10px; border: 1px solid #8884; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { background: #8882; }
+  button:disabled, select:disabled { opacity: .5; cursor: default; }
+  .menu { display: grid; gap: 6px; }
+  .menu button { display: flex; justify-content: space-between; text-align: left; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 4px 0; border-bottom: 1px solid #8883; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .total { display: flex; justify-content: space-between; margin-top: 10px; font-size: 18px; font-weight: 600; }
+  .row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  .empty { opacity: .6; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <section><h2>Menu</h2><div class="menu" id="menu"></div></section>
+  <section>
+    <h2>Order</h2>
+    <table><tbody id="order"></tbody></table>
+    <p class="empty" id="empty">Nothing on the order yet.</p>
+    <div class="row"><label for="disc">Discount</label><select id="disc"></select></div>
+    <div class="total"><span>Total</span><span id="total">0.00</span></div>
+  </section>
+</div>
+<script>
+// A tiny till that speaks the exam widget protocol (version 1):
+//   exam -> widget  {type:"exam:init", state, config, readOnly}
+//   widget -> exam  {type:"exam:ready"} and {type:"exam:response", state}
+(function () {
+  var VERSION = 1;
+  var menu = [], discounts = [0], order = [], discountPct = 0, readOnly = false;
+
+  function total() {
+    var sum = order.reduce(function (s, l) { return s + l.qty * l.price; }, 0);
+    return Math.round(sum * (1 - discountPct / 100) * 100) / 100;
+  }
+  function state() { return { order: order, discountPct: discountPct, total: total() }; }
+  function report() { parent.postMessage({ type: "exam:response", version: VERSION, state: state() }, "*"); }
+
+  function render() {
+    var menuEl = document.getElementById("menu");
+    menuEl.innerHTML = "";
+    menu.forEach(function (m) {
+      var b = document.createElement("button");
+      b.disabled = readOnly;
+      b.innerHTML = "<span></span><span></span>";
+      b.children[0].textContent = m.name;
+      b.children[1].textContent = m.price.toFixed(2);
+      b.onclick = function () {
+        var line = order.find(function (l) { return l.name === m.name; });
+        if (line) line.qty += 1; else order.push({ name: m.name, qty: 1, price: m.price });
+        render(); report();
+      };
+      menuEl.appendChild(b);
+    });
+
+    var tbody = document.getElementById("order");
+    tbody.innerHTML = "";
+    order.forEach(function (l, i) {
+      var tr = document.createElement("tr");
+      var name = document.createElement("td"); name.textContent = l.name;
+      var qty = document.createElement("td"); qty.className = "num";
+      var minus = document.createElement("button"); minus.textContent = "−"; minus.setAttribute("aria-label", "One fewer " + l.name); minus.disabled = readOnly;
+      var plus = document.createElement("button"); plus.textContent = "+"; plus.setAttribute("aria-label", "One more " + l.name); plus.disabled = readOnly;
+      var n = document.createElement("span"); n.textContent = " " + l.qty + " ";
+      minus.onclick = function () { l.qty -= 1; if (l.qty <= 0) order.splice(i, 1); render(); report(); };
+      plus.onclick = function () { l.qty += 1; render(); report(); };
+      qty.append(minus, n, plus);
+      var sub = document.createElement("td"); sub.className = "num"; sub.textContent = (l.qty * l.price).toFixed(2);
+      tr.append(name, qty, sub);
+      tbody.appendChild(tr);
+    });
+    document.getElementById("empty").hidden = order.length > 0;
+
+    var sel = document.getElementById("disc");
+    sel.innerHTML = "";
+    discounts.forEach(function (d) {
+      var o = document.createElement("option"); o.value = String(d); o.textContent = d + "%"; o.selected = d === discountPct; sel.appendChild(o);
+    });
+    sel.disabled = readOnly;
+    document.getElementById("total").textContent = total().toFixed(2);
+  }
+
+  document.getElementById("disc").onchange = function (e) { discountPct = Number(e.target.value); render(); report(); };
+
+  window.addEventListener("message", function (e) {
+    // Only the exam page that embeds us may talk to us.
+    if (e.source !== parent) return;
+    var m = e.data;
+    if (!m || m.type !== "exam:init" || m.version !== VERSION) return;
+    var cfg = m.config || {};
+    menu = Array.isArray(cfg.menu) ? cfg.menu : [];
+    discounts = Array.isArray(cfg.discounts) && cfg.discounts.length ? cfg.discounts : [0];
+    readOnly = !!m.readOnly;
+    var s = m.state || {};
+    order = Array.isArray(s.order) ? s.order : [];
+    discountPct = typeof s.discountPct === "number" ? s.discountPct : discounts[0];
+    render();
+  });
+
+  render();
+  parent.postMessage({ type: "exam:ready", version: VERSION }, "*");
+})();
+</script>
+</body>
+</html>

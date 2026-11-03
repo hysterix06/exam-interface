@@ -2,13 +2,14 @@
 // demo course, and a small question bank with a draft exam to try Phase 2 on.
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { Role } from "@/lib/auth/roles";
 import { getQuestionType } from "@/question-types/registry";
 import * as schema from "../schema";
 import { DEMO_QUESTIONS, DEMO_TOPICS } from "./demo-content";
+import { seedPracticeResults } from "./practice";
 
 config({ path: ".env.local" });
 
@@ -76,6 +77,46 @@ async function seedQuestionBank(db: SeedDb, authorId: string) {
   console.log(`  questions  ${DEMO_QUESTIONS.length} in ${DEMO_TOPICS.length} topics, plus a draft exam`);
 }
 
+const OPEN_EXAM_TITLE = "BIO 101 Quiz (open)";
+
+// A published, open exam so the student flow can be tried right away. Locked to
+// the current version of every active question, exactly as publishing does.
+async function seedOpenExam(db: SeedDb, authorId: string) {
+  const [already] = await db.select({ id: schema.exams.id }).from(schema.exams).where(eq(schema.exams.title, OPEN_EXAM_TITLE)).limit(1);
+  if (already) return;
+
+  const topics = await db.select().from(schema.topics).where(eq(schema.topics.courseId, DEMO_COURSE_ID));
+  const byName = Object.fromEntries(topics.map((t) => [t.name, t.id]));
+  if (!byName["Cell Biology"] || !byName["Genetics"]) return;
+
+  const live = await db
+    .select({ id: schema.questions.id, versionId: schema.questionVersions.id })
+    .from(schema.questions)
+    .innerJoin(
+      schema.questionVersions,
+      and(eq(schema.questionVersions.questionId, schema.questions.id), eq(schema.questionVersions.version, schema.questions.version)),
+    )
+    .where(and(eq(schema.questions.status, "active"), inArray(schema.questions.topicId, [byName["Cell Biology"], byName["Genetics"]])));
+
+  await db.insert(schema.exams).values({
+    courseId: DEMO_COURSE_ID,
+    title: OPEN_EXAM_TITLE,
+    description: "A short open quiz for trying the student experience.",
+    blueprint: {
+      sections: [
+        { topicId: byName["Cell Biology"], count: 3 },
+        { topicId: byName["Genetics"], count: 2 },
+      ],
+      shuffleQuestions: true,
+    },
+    settings: { timeLimitMinutes: 15, attemptsAllowed: 2, requireCode: false, oneWayNavigation: false, release: "explanations" },
+    lockedVersions: Object.fromEntries(live.map((q) => [q.id, q.versionId])),
+    state: "open",
+    createdBy: authorId,
+  });
+  console.log(`  exam       ${OPEN_EXAM_TITLE}`);
+}
+
 async function main() {
   const password = env("SEED_PASSWORD");
   const supabase = createClient(env("NEXT_PUBLIC_SUPABASE_URL"), env("SUPABASE_SECRET_KEY"), {
@@ -126,6 +167,8 @@ async function main() {
   console.log("  course     BIO 101 (student enrolled)");
 
   await seedQuestionBank(db, ids.instructor);
+  await seedOpenExam(db, ids.instructor);
+  await seedPracticeResults(db, supabase, password, DEMO_COURSE_ID, ids.instructor);
 
   await sql.end();
 }

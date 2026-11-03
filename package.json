@@ -13,15 +13,21 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "supabase db push",
     "db:seed": "tsx src/db/seed/index.ts",
-    "test:coverage": "vitest run --coverage --coverage.include='src/engine/**' --coverage.include='src/question-types/**' --coverage.exclude='**/*.test.ts' --coverage.exclude='**/*.tsx' --coverage.exclude='**/ui-registry.ts' --coverage.exclude='**/ui-types.ts'"
+    "test:coverage": "vitest run --coverage --coverage.include='src/engine/**' --coverage.include='src/question-types/**' --coverage.exclude='**/*.test.ts' --coverage.exclude='**/*.tsx' --coverage.exclude='**/ui-registry.ts' --coverage.exclude='**/ui-types.ts'",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.0",
     "drizzle-orm": "^0.45.4",
+    "hyperformula": "^3.5.0",
     "lucide-react": "^1.64.0",
+    "mathjs": "^15.2.0",
     "next": "16.4.3",
     "postgres": "^3.4.9",
     "radix-ui": "^1.8.1",
@@ -31,6 +37,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^24.19.2",
     "@types/react": "^19",

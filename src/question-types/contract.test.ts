@@ -39,9 +39,15 @@ describe.each([...questionTypes.values()])("$id contract", (type) => {
         const key = type.keyResponse(frozen);
         type.responseSchema.parse(key);
         const best = type.grade(frozen, key, { points: POINTS });
-        expect(best.score).toBe(POINTS);
         expect(best.max).toBe(POINTS);
         expect(sumPoints(best.lines)).toBe(best.score);
+        if (type.manual) {
+          // A human awards the points; the machine only flags the answer.
+          expect(best.needsReview).toBe(true);
+          expect(best.score).toBe(0);
+        } else {
+          expect(best.score).toBe(POINTS);
+        }
 
         const blank = type.grade(frozen, null, { points: POINTS });
         expect(blank.score).toBe(0);

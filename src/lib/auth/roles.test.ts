@@ -4,6 +4,9 @@ import { canAccess, homeFor, isRole, rolesForPath } from "./roles";
 describe("canAccess", () => {
   it("lets anyone reach public paths", () => {
     expect(canAccess(null, "/login")).toBe(true);
+    expect(canAccess(null, "/widgets/pos-demo.html")).toBe(true);
+    // Prefix matching is by path segment, not by string prefix.
+    expect(canAccess(null, "/widgetsx")).toBe(false);
   });
 
   it("requires a session everywhere else", () => {

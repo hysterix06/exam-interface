@@ -43,6 +43,8 @@ export function ChoiceList({
           <input
             type={multiple ? "checkbox" : "radio"}
             name={name}
+            // An option with no text yet (a half-written question) still needs a name for screen readers.
+            aria-label={o.text.trim() ? undefined : "Empty option"}
             className="mt-0.5 accent-foreground"
             checked={selected.includes(o.id)}
             disabled={readOnly}

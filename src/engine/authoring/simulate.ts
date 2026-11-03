@@ -180,7 +180,8 @@ export function checkKeys(
     for (const item of items) {
       const type = getQuestionType(item.type);
       const perfect = type.grade(item.instance, type.keyResponse(item.instance), { points: item.points });
-      if (perfect.score !== item.points) {
+      // Human-graded types can't be checked by machine; blank must still score 0.
+      if (!type.manual && perfect.score !== item.points) {
         failures.push({ seed, questionId: item.questionId, kind: "perfect", score: perfect.score, expected: item.points });
       }
       const blank = type.grade(item.instance, null, { points: item.points });

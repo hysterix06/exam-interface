@@ -11,6 +11,11 @@ export interface QuestionTypeCore<TDef, TInstance, TResponse> {
   id: string;
   /** Human name for the editor and explanations. */
   label: string;
+  /**
+   * Graded by a person: grade() only flags the answer for review (score 0,
+   * needsReview true), so "key = full marks" cannot hold for it.
+   */
+  manual?: boolean;
   /** What an author stores (the template). */
   defSchema: z.ZodType<TDef>;
   /** A generated, frozen instance (includes the answer key; server only). */

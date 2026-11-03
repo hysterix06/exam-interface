@@ -16,8 +16,10 @@ import { summarizeBlueprint } from "@/engine/authoring/summary";
 import { RELEASE_LABELS, type ExamSettings } from "@/engine/exam";
 import { checkBlueprint } from "@/engine/selection/check";
 import { questionLabel } from "@/lib/question-label";
+import { AdaptivePanel } from "./adaptive-panel";
 import { BlueprintEditor } from "./blueprint-editor";
 import { PoolTable } from "./pool-table";
+import { RunControls } from "./run-controls";
 import { SamplePanel } from "./sample-panel";
 import type { BuilderExam, BuilderTopic } from "./types";
 import { VerifyPanel } from "./verify-panel";
@@ -162,6 +164,25 @@ export function ExamBuilder({
 
       <Section title="Sample student" hint="Pick any seed to see one student's exact exam and why those questions were chosen.">
         <SamplePanel blueprint={blueprint} pool={drawablePool} topicNames={topicNames} questionNames={questionNames} />
+      </Section>
+
+      <Section
+        title="Adaptive preview"
+        hint="How difficulty stepping would behave on this pool: a right answer gets a harder question, a miss gets an easier one. A preview of the rules only. Live exams still use the fixed draw above."
+      >
+        <AdaptivePanel pool={drawablePool} count={summary.questionCount} questionNames={questionNames} />
+      </Section>
+
+      <Section
+        title="Run it"
+        hint="Try the exam yourself first. Preview attempts are marked and never count in results."
+      >
+        <RunControls
+          examId={exam.id}
+          state={exam.state}
+          requireCode={settings.requireCode}
+          disabled={dirty || summary.questionCount === 0}
+        />
       </Section>
 
       <Section title="Settings">

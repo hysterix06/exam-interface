@@ -11,10 +11,13 @@ const ROUTE_RULES: { prefix: string; roles: readonly Role[] }[] = [
   { prefix: "/admin", roles: ["admin", "instructor"] },
   { prefix: "/author", roles: ["admin", "instructor"] },
   { prefix: "/exams", roles: ROLES },
+  { prefix: "/attempt", roles: ROLES },
   { prefix: "/exam", roles: ROLES },
 ];
 
-export const PUBLIC_PATHS = ["/login"] as const;
+// /widgets holds static, public widget pages (embedded in sandboxed iframes by
+// the exam). They must never contain anything secret.
+export const PUBLIC_PATHS = ["/login", "/widgets"] as const;
 
 function matchesPrefix(pathname: string, prefix: string) {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);

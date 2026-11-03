@@ -2,7 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/server/auth";
-import { createExam, publishExam, saveExam, unpublishExam } from "@/server/authoring/exams";
+import type { ExamStateName } from "@/engine/exam-state";
+import { createCodes } from "@/server/attempts/codes";
+import { startPreviewAttempt } from "@/server/attempts/start";
+import { createExam, publishExam, saveExam, setExamState, unpublishExam } from "@/server/authoring/exams";
 
 const done = <T extends { ok: boolean }>(r: T) => {
   if (r.ok) revalidatePath("/author", "layout");
@@ -27,4 +30,19 @@ export async function publishExamAction(examId: string) {
 export async function unpublishExamAction(examId: string) {
   const user = await requireRole("admin", "instructor");
   return done(await unpublishExam(user, examId));
+}
+
+export async function setExamStateAction(examId: string, to: ExamStateName) {
+  const user = await requireRole("admin", "instructor");
+  return done(await setExamState(user, examId, to));
+}
+
+export async function createCodesAction(examId: string, n: number) {
+  const user = await requireRole("admin", "instructor");
+  return createCodes(user, examId, n);
+}
+
+export async function startPreviewAction(examId: string) {
+  const user = await requireRole("admin", "instructor");
+  return startPreviewAttempt(user, examId);
 }

@@ -54,6 +54,7 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // widgets/ are static pages embedded in the exam; a signed-in user must not be redirected away from them.
+    "/((?!_next/static|_next/image|favicon.ico|widgets/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

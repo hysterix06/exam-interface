@@ -35,6 +35,7 @@ A showcase exam app: the UI is the product. Full spec in `README.md`; implementa
     redact(inst): unknown;                               // instance minus answer key: the only thing sent to students
   }
   ```
+- **Human-graded types** set `manual: true` on the core: `grade()` only flags `needsReview` (score 0); a person marks them in `/admin/review`. The contract suite and the perfect-student check accommodate this.
 - **Explainability as data:** selector, generator, grader and pre-flight return structured traces; UI renders them, never re-derives. Grade line points must sum to the score (contract-tested); only the total is rounded.
 - **Attempt building:** `buildAttempt(seed, blueprint, pool)` in `src/engine/attempt.ts` = weighted selection (`src/engine/selection/`) + per-question generation. Reproduce = call it again and diff.
 - **Own RNG** (`src/engine/rng.ts`: `sfc32` seeded by `cyrb128`), pinned by golden tests in `rng.test.ts`. Never change it. Per-question seed = `hash(attempt.seed + ":" + questionVersionId)`.
@@ -48,7 +49,17 @@ Key idea: the generated instance is frozen in `attempt_items`, so attempts stay 
 ## Workflow
 
 - `npm run dev` · `npm run typecheck` · `npm run lint` · `npm test` · `npm run test:coverage` (engine + question types, keep ≥95% lines)
+- `npm run test:e2e` (Playwright; needs `.env.local`, a seeded database and `npx playwright install chromium`; starts its own dev server, so stop any other `next dev` first). Not in CI because it needs Supabase credentials. `e2e/global-setup.ts` resets the demo quiz's attempts each run.
 - Schema change: edit `src/db/schema.ts` → `npm run db:generate` → `npm run db:push` (applies `supabase/migrations` to the linked project). Hand-written SQL (RLS, triggers): `npx drizzle-kit generate --custom --name <name>`.
 - `npm run db:seed` creates demo accounts `admin|instructor|student@example.com` (password from `SEED_PASSWORD`).
 - Add a dependency only when the phase that needs it starts.
 - Graders and generators are built test-first.
+
+## Things to know
+
+- **Licence:** `hyperformula` (spreadsheet type) is GPL-3.0-only unless a commercial licence is bought. Decide before distributing.
+- **Widgets** live in `public/widgets/` and speak the `postMessage` protocol in `src/engine/widget.ts`. They are public static files (excluded from `proxy.ts`), so they must never contain anything secret. Register new ones in `WIDGETS`.
+- **Postgres jsonb reorders object keys.** Never compare stored JSON with `JSON.stringify`; use `canonical()` from `src/engine/regrade.ts`.
+- **Exam lifecycle** is `src/engine/exam-state.ts`; students see `effectiveState()` (schedule windows apply without a background job).
+- **Adaptive mode** is a rules preview only (`src/engine/adaptive.ts` + builder panel); live attempts still use the fixed draw.
+- Demo data: `npm run db:seed` makes the three accounts, 15 questions, a draft midterm, an open quiz, and a released practice exam with 30 graded students.

@@ -5,7 +5,10 @@ import { type AttemptPoolItem, buildAttempt } from "./attempt";
 import type { Blueprint } from "./selection/types";
 
 // One pool entry per fixture, spread over two topics.
-const POOL: AttemptPoolItem[] = Object.entries(fixturesByType).flatMap(([type, defs]) =>
+// Human-graded types can't score full marks by machine, so they sit this one out.
+const POOL: AttemptPoolItem[] = Object.entries(fixturesByType)
+  .filter(([type]) => !getQuestionType(type).manual)
+  .flatMap(([type, defs]) =>
   defs.map((def, i) => ({
     id: `${type}-${i}`,
     versionId: `${type}-${i}-v1`,

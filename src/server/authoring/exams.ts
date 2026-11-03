@@ -3,7 +3,9 @@ import { and, count, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
 import { attempts, courses, exams, topics } from "@/db/schema";
+import { finalizeStoredAttempt } from "@/server/attempts/take";
 import { preflightExam, type PreflightReport } from "@/engine/authoring/preflight";
+import { canTransition, type ExamStateName } from "@/engine/exam-state";
 import { examSettingsSchema } from "@/engine/exam";
 import { blueprintSchema } from "@/engine/selection/types";
 import { questionLabel } from "@/lib/question-label";
@@ -167,6 +169,42 @@ export async function unpublishExam(user: CurrentUser, examId: string): Promise<
     entityId: examId,
     before: { state: exam.state },
     after: { state: "draft" },
+  });
+  return { ok: true };
+}
+
+/**
+ * Run-time lifecycle: open, close, release results. Closing ends every
+ * in-progress attempt (graded from what was saved), so nothing is left dangling.
+ */
+export async function setExamState(
+  user: CurrentUser,
+  examId: string,
+  to: ExamStateName,
+): Promise<ActionResult> {
+  const exam = await getExam(user.orgId, examId);
+  if (!exam) return { ok: false, error: "That exam no longer exists." };
+  if (!canTransition(exam.state, to)) {
+    return { ok: false, error: `An exam that is ${exam.state} can't go to ${to}.` };
+  }
+
+  if (to === "closed") {
+    const open = await db
+      .select({ id: attempts.id })
+      .from(attempts)
+      .where(and(eq(attempts.examId, examId), eq(attempts.state, "in_progress")));
+    for (const a of open) await finalizeStoredAttempt(a.id, user.id, "closed");
+  }
+
+  await db.update(exams).set({ state: to }).where(eq(exams.id, examId));
+  await writeAudit({
+    orgId: user.orgId,
+    actorId: user.id,
+    action: `exam.${to}`,
+    entityType: "exam",
+    entityId: examId,
+    before: { state: exam.state },
+    after: { state: to },
   });
   return { ok: true };
 }
