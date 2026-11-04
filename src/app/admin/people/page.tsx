@@ -5,6 +5,7 @@ import { ImportPeople } from "@/components/admin/import-people";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterForm } from "@/components/ui/filter-form";
 import { Input } from "@/components/ui/input";
 import { LocalTime } from "@/components/ui/local-time";
 import { PageHeader } from "@/components/ui/page-header";
@@ -47,7 +48,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
         }
       />
 
-      <form className="mb-6 flex flex-wrap gap-2" role="search">
+      <FilterForm className="mb-6 flex flex-wrap gap-2">
         <Input name="q" defaultValue={filters.q} placeholder="Search by name or email" aria-label="Search people" className="min-w-48 flex-1" />
         <Select name="role" defaultValue={filters.role ?? ""} aria-label="Role" className="w-auto">
           <option value="">Everyone</option>
@@ -63,15 +64,12 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
           <option value="never">Never signed in</option>
           <option value="inactive">Switched off</option>
         </Select>
-        <Button type="submit" variant="outline">
-          Filter
-        </Button>
         {filtered && (
           <Button asChild variant="ghost">
             <Link href="/admin/people">Clear</Link>
           </Button>
         )}
-      </form>
+      </FilterForm>
 
       {people.length === 0 ? (
         <EmptyState>{filtered ? "Nobody matches those filters." : "No one here yet. Add people one at a time, or import a list."}</EmptyState>

@@ -120,3 +120,22 @@ test("students cannot reach admin pages or the export", async ({ page }) => {
   const res = await page.request.get("/teach/exams/00000000-0000-0000-0000-000000000000/export", { maxRedirects: 0 });
   expect([307, 403]).toContain(res.status());
 });
+
+test("the people list filters as you go, and Clear resets it", async ({ page }) => {
+  await signIn(page, "admin@example.com");
+  await page.goto("/admin/people");
+  await expect(page.getByRole("button", { name: "Filter" })).toHaveCount(0);
+
+  await page.getByRole("combobox", { name: "Role" }).selectOption("instructor");
+  await expect(page).toHaveURL(/role=instructor/);
+  await expect(page.getByRole("link", { name: /student@example.com|Sam Student/ })).toHaveCount(0);
+
+  await page.getByRole("textbox", { name: "Search people" }).fill("instructor2");
+  await expect(page).toHaveURL(/q=instructor2/);
+  await expect(page.getByRole("table").getByRole("row")).toHaveCount(2);
+
+  await page.getByRole("link", { name: "Clear" }).click();
+  await expect(page).toHaveURL(/\/admin\/people$/);
+  await expect(page.getByRole("combobox", { name: "Role" })).toHaveValue("");
+  await expect(page.getByRole("textbox", { name: "Search people" })).toHaveValue("");
+});

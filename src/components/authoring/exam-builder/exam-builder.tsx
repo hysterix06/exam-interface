@@ -159,42 +159,46 @@ export function ExamBuilder({
 
       <BuilderSection title="Rules">
         <fieldset disabled={locked} className="grid gap-4 sm:grid-cols-2">
-          <Field label="Time limit (minutes)" hint="Blank for no limit. The server keeps the time.">
-            <Input
-              type="number"
-              min={1}
-              value={settings.timeLimitMinutes ?? ""}
-              onChange={(e) =>
-                setSetting("timeLimitMinutes", e.target.value === "" ? null : Math.max(1, Math.floor(Number(e.target.value)) || 1))
-              }
-            />
-          </Field>
-          <Field label="Attempts allowed">
-            <Input
-              type="number"
-              min={1}
-              value={settings.attemptsAllowed}
-              onChange={(e) => setSetting("attemptsAllowed", Math.max(1, Math.floor(Number(e.target.value)) || 1))}
-            />
-          </Field>
-          <Field label="When results are released, students see">
-            <Select value={settings.release} onChange={(e) => setSetting("release", e.target.value as ExamSettings["release"])}>
-              {Object.entries(RELEASE_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <div className="grid content-start gap-3 pt-6 text-sm">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" className="size-4 accent-foreground" checked={settings.requireCode} onChange={(e) => setSetting("requireCode", e.target.checked)} />
-              Require a single-use access code
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" className="size-4 accent-foreground" checked={settings.oneWayNavigation} onChange={(e) => setSetting("oneWayNavigation", e.target.checked)} />
-              One-way: no going back to earlier questions
-            </label>
+          <div className="grid content-start gap-4">
+            <Field label="Time limit (minutes)" hint="Blank for no limit. The server keeps the time.">
+              <Input
+                type="number"
+                min={1}
+                value={settings.timeLimitMinutes ?? ""}
+                onChange={(e) =>
+                  setSetting("timeLimitMinutes", e.target.value === "" ? null : Math.max(1, Math.floor(Number(e.target.value)) || 1))
+                }
+              />
+            </Field>
+            <Field label="Attempts allowed">
+              <Input
+                type="number"
+                min={1}
+                value={settings.attemptsAllowed}
+                onChange={(e) => setSetting("attemptsAllowed", Math.max(1, Math.floor(Number(e.target.value)) || 1))}
+              />
+            </Field>
+          </div>
+          <div className="grid content-start gap-4">
+            <Field label="When results are released, students see">
+              <Select value={settings.release} onChange={(e) => setSetting("release", e.target.value as ExamSettings["release"])}>
+                {Object.entries(RELEASE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <div className="grid content-start gap-3 text-sm">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" className="size-4 accent-foreground" checked={settings.requireCode} onChange={(e) => setSetting("requireCode", e.target.checked)} />
+                Require a single-use access code
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" className="size-4 accent-foreground" checked={settings.oneWayNavigation} onChange={(e) => setSetting("oneWayNavigation", e.target.checked)} />
+                One-way: no going back to earlier questions
+              </label>
+            </div>
           </div>
         </fieldset>
       </BuilderSection>

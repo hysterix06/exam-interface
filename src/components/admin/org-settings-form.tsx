@@ -43,14 +43,12 @@ export function OrgSettingsForm({ name, settings }: { name: string; settings: Or
       </Field>
       <fieldset className="grid gap-4">
         <legend className="mb-1 text-sm font-medium">New exams start with</legend>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Time limit (minutes)" hint="Blank for no limit.">
-            <Input name="timeLimit" type="number" min={1} defaultValue={settings.defaults.timeLimitMinutes ?? ""} />
-          </Field>
-          <Field label="Attempts allowed">
-            <Input name="attempts" type="number" min={1} defaultValue={settings.defaults.attemptsAllowed} />
-          </Field>
-        </div>
+        <Field label="Time limit (minutes)" hint="Blank for no limit.">
+          <Input name="timeLimit" type="number" min={1} defaultValue={settings.defaults.timeLimitMinutes ?? ""} />
+        </Field>
+        <Field label="Attempts allowed">
+          <Input name="attempts" type="number" min={1} defaultValue={settings.defaults.attemptsAllowed} />
+        </Field>
         <Field label="When results are released, students see">
           <Select name="release" defaultValue={settings.defaults.release}>
             {Object.entries(RELEASE_LABELS).map(([v, l]) => (
