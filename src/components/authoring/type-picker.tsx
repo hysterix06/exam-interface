@@ -10,7 +10,7 @@ export function TypePicker({ topicId }: { topicId?: string }) {
       {[...questionTypes.values()].map((t) => (
         <li key={t.id}>
           <Link
-            href={`/author/questions/new?type=${t.id}${topicId ? `&topic=${topicId}` : ""}`}
+            href={`/teach/questions/new?type=${t.id}${topicId ? `&topic=${topicId}` : ""}`}
             className="block rounded-lg border p-4 hover:bg-muted/50"
           >
             <span className="block font-medium">{t.label}</span>

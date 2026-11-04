@@ -39,7 +39,7 @@ export function ResultsView({
           <span className="ml-3 text-xl text-muted-foreground">{pct}%</span>
         </p>
         {pendingReview && (
-          <p className="mt-2 text-sm text-warning">
+          <p className="mt-2 text-sm text-muted-foreground">
             Some answers still need to be marked by your instructor, so this score may change.
           </p>
         )}

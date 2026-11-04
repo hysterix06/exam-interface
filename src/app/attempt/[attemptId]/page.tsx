@@ -7,7 +7,7 @@ import { loadAttemptForTaking } from "@/server/attempts/take";
 export default async function AttemptPage({ params }: PageProps<"/attempt/[attemptId]">) {
   const user = await requireRole();
   const { attemptId } = await params;
-  if (!z.uuid().safeParse(attemptId).success) notFound();
+  if (!z.guid().safeParse(attemptId).success) notFound();
 
   const attempt = await loadAttemptForTaking(user, attemptId);
   if (!attempt) notFound();

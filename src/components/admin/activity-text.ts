@@ -1,0 +1,43 @@
+/** Audit actions in plain words, for the activity feed. */
+const WORDS: Record<string, string> = {
+  "person.add": "added a person",
+  "person.import": "imported people",
+  "person.role": "changed a role",
+  "person.deactivate": "switched off an account",
+  "person.reactivate": "switched an account back on",
+  "person.password": "reset a password",
+  "course.create": "created a course",
+  "course.update": "renamed a course",
+  "course.archive": "archived a course",
+  "course.restore": "restored a course",
+  "course.enrol": "enrolled students",
+  "course.assign_teacher": "assigned a teacher",
+  "course.remove_member": "removed someone from a course",
+  "org.update": "changed organisation settings",
+  "exam.create": "created an exam",
+  "exam.update": "edited a draft exam",
+  "exam.publish": "published an exam",
+  "exam.unpublish": "unpublished an exam",
+  "exam.open": "opened an exam",
+  "exam.closed": "closed an exam",
+  "exam.graded": "marked an exam graded",
+  "exam.released": "released results",
+  "exam.schedule": "changed an exam window",
+  "exam.codes": "generated access codes",
+  "exam.regrade": "regraded a question",
+  "extension.add": "granted extra time",
+  "extension.remove": "removed extra time",
+  "question.create": "wrote a question",
+  "question.update": "edited a question",
+  "question.status": "changed a question’s status",
+  "question.restore": "restored a question version",
+  "topic.create": "added a topic",
+  "topic.rename": "renamed a topic",
+  "topic.delete": "deleted a topic",
+  "grade.review": "marked an answer",
+  "attempt.closed": "ended an attempt when the exam closed",
+};
+
+export function activityText(action: string) {
+  return WORDS[action] ?? action.replace(/[._]/g, " ");
+}

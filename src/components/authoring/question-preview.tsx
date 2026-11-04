@@ -1,5 +1,6 @@
 "use client";
 
+import { ButtonTabs } from "@/components/ui/button-tabs";
 import { RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -58,24 +59,15 @@ export function QuestionPreview({
 
   return (
     <div className="grid gap-4">
-      <div className="flex gap-1 border-b text-sm" role="tablist">
-        {(
-          [
-            ["student", "Student view"],
-            ["variants", "Variants"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => setTab(id)}
-            className="-mb-px border-b-2 border-transparent px-3 py-2 text-muted-foreground aria-selected:border-foreground aria-selected:text-foreground"
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <ButtonTabs
+        label="Preview"
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: "student", label: "Student view" },
+          { value: "variants", label: "Variants" },
+        ]}
+      />
 
       {tab === "student" && (
         <>

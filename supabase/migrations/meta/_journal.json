@@ -15,6 +15,20 @@
       "when": 1793280433191,
       "tag": "20261029132713_auth_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793717915211,
+      "tag": "20261103145835_familiar_pixie",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793717920541,
+      "tag": "20261103145840_course_scoped_rls",
+      "breakpoints": true
     }
   ]
 }

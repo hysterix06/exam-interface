@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNotNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { attemptItems, attempts, exams, grades, questionVersions, responses } from "@/db/schema";
 import { isExpired, secondsLeft } from "@/engine/attempts/deadline";
@@ -50,13 +50,18 @@ export async function finalizeStoredAttempt(attemptId: string, actorId?: string,
       .orderBy(asc(attemptItems.position));
 
     const result = finalizeAttempt(rows.map((r) => ({ ...r, response: r.response ?? null })));
-    for (const item of result.items) {
+    if (result.items.length > 0) {
       await tx
         .insert(grades)
-        .values({ attemptItemId: item.id, score: item.score, max: item.max, lines: item.lines, needsReview: item.needsReview })
+        .values(result.items.map((item) => ({ attemptItemId: item.id, score: item.score, max: item.max, lines: item.lines, needsReview: item.needsReview })))
         .onConflictDoUpdate({
           target: grades.attemptItemId,
-          set: { score: item.score, max: item.max, lines: item.lines, needsReview: item.needsReview },
+          set: {
+            score: sql`excluded.score`,
+            max: sql`excluded.max`,
+            lines: sql`excluded.lines`,
+            needsReview: sql`excluded.needs_review`,
+          },
         });
     }
     const [updated] = await tx
@@ -77,6 +82,37 @@ export async function finalizeStoredAttempt(attemptId: string, actorId?: string,
     }
     return updated;
   });
+}
+
+/** Finalize several attempts, a few at a time so the connection pool isn't exhausted. */
+export async function finalizeMany(ids: string[], actorId?: string, reason = "submit") {
+  for (let i = 0; i < ids.length; i += 3) {
+    await Promise.all(ids.slice(i, i + 3).map((id) => finalizeStoredAttempt(id, actorId, reason)));
+  }
+}
+
+/**
+ * Finish attempts whose time ran out while nobody was looking: the student's
+ * deadline passed, or the exam's scheduled window closed. There is no
+ * background job; pages that show attempts call this first. Idempotent.
+ */
+export async function sweepExpired(exam: typeof exams.$inferSelect) {
+  const now = new Date();
+  const closed = windowClosed(exam, now);
+  const overdue = await db
+    .select({ id: attempts.id })
+    .from(attempts)
+    .where(
+      and(
+        eq(attempts.examId, exam.id),
+        eq(attempts.state, "in_progress"),
+        eq(attempts.isPreview, false),
+        closed ? undefined : and(isNotNull(attempts.deadlineAt), lt(attempts.deadlineAt, now)),
+      ),
+    )
+    .limit(200);
+  await finalizeMany(overdue.map((a) => a.id));
+  return overdue.length;
 }
 
 /** Everything the exam-taking screen needs. Instances are redacted: no answer keys. */

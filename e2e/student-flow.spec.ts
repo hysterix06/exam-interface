@@ -1,22 +1,11 @@
-import { config } from "dotenv";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { openExam, signIn } from "./helpers";
 
-config({ path: ".env.local", quiet: true });
-const PASSWORD = process.env.SEED_PASSWORD!;
-
-async function signIn(page: Page, email: string) {
-  await page.goto("/login");
-  await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill(PASSWORD);
-  await page.getByRole("button", { name: /sign in/i }).click();
-  await expect(page).toHaveURL(/\/(exams|author)/);
-}
-
-test("student enters, answers, resumes after reload, submits", async ({ page }) => {
+test("student starts from home, answers, resumes after reload, submits", async ({ page }) => {
   await signIn(page, "student@example.com");
-  await page.goto("/exams");
-  await page.getByRole("link", { name: /BIO 101 Quiz/ }).click();
-  await page.getByRole("button", { name: /start exam|resume exam/i }).click();
+  await expect(page.getByRole("heading", { name: "Ready for you" })).toBeVisible();
+  await page.getByRole("link", { name: /BIO 101 Quiz/ }).first().click();
+  await page.getByRole("button", { name: /start exam|resume/i }).click();
   await expect(page).toHaveURL(/\/attempt\//);
 
   await expect(page.getByText("1 / 5")).toBeVisible();
@@ -34,23 +23,34 @@ test("student enters, answers, resumes after reload, submits", async ({ page }) 
   await expect(page.getByText("1 / 5")).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Questions" }).getByRole("button", { name: /Question 1, answered/ })).toBeVisible();
 
+  // The submit dialog lists what's unanswered.
   await page.getByRole("button", { name: "Submit" }).click();
-  await page.getByRole("button", { name: "Yes, submit" }).click();
+  const dialog = page.getByRole("dialog", { name: "Submit your exam?" });
+  await expect(dialog.getByText(/4 unanswered/)).toBeVisible();
+  await dialog.getByRole("button", { name: "Submit" }).click();
   await expect(page).toHaveURL(/\/results\//);
-  await expect(page.getByText(/submitted/i)).toBeVisible();
+
+  // It shows up under Results.
+  await page.getByRole("link", { name: "Results", exact: true }).click();
+  await expect(page.getByRole("link", { name: /BIO 101 Quiz/ }).first()).toBeVisible();
 });
 
-test("a student cannot reach authoring", async ({ page }) => {
+test("a student cannot reach teaching or admin", async ({ page }) => {
   await signIn(page, "student@example.com");
-  await page.goto("/author");
-  await expect(page).toHaveURL(/\/exams/);
+  await page.goto("/teach");
+  await expect(page).toHaveURL(/:\d+\/$/);
+  await page.goto("/admin/people");
+  await expect(page).toHaveURL(/:\d+\/$/);
 });
 
-test("staff preview runs the same screen and is flagged", async ({ page }) => {
+test("staff preview runs the same screen, is flagged, and can be found again", async ({ page }) => {
   await signIn(page, "instructor@example.com");
-  await page.goto("/author/exams");
-  await page.getByRole("link", { name: /BIO 101 Quiz/ }).click();
+  await openExam(page, /BIO 101 Quiz/);
+  await page.getByRole("navigation", { name: "Exam" }).getByRole("link", { name: "Verify" }).click();
   await page.getByRole("button", { name: "Take it as a student" }).click();
   await expect(page).toHaveURL(/\/attempt\//);
-  await expect(page.getByText(/excluded from results/i)).toBeVisible();
+  await expect(page.getByText(/never counts in results/i)).toBeVisible();
+  await page.goBack();
+  await page.reload();
+  await expect(page.getByRole("link", { name: /Resume/ }).first()).toBeVisible();
 });

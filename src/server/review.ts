@@ -1,29 +1,32 @@
 import "server-only";
-import { and, asc, count, eq, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { attemptItems, attempts, exams, grades, profiles, questionVersions, responses } from "@/db/schema";
+import { attemptItems, attempts, courses, exams, grades, profiles, questionVersions, responses } from "@/db/schema";
 import { gradeRubric, type LongAnswerInstance } from "@/question-types/long-answer/core";
 import { getQuestionType } from "@/question-types/registry";
 import type { CurrentUser } from "@/server/auth";
 import { writeAudit } from "@/server/authoring/audit";
 import type { ActionResult } from "@/server/authoring/questions";
 import { questionLabel } from "@/lib/question-label";
+import { canTeach, inScope, type Scope, scopeFor } from "@/server/access";
 
 /** Exams with answers waiting for a human, real attempts only. */
-export async function listReviewExams(orgId: string) {
+export async function listReviewExams(scope: Scope) {
   return db
     .select({
       id: exams.id,
       title: exams.title,
       state: exams.state,
+      courseTitle: courses.title,
       pending: count(),
     })
     .from(grades)
     .innerJoin(attemptItems, eq(attemptItems.id, grades.attemptItemId))
     .innerJoin(attempts, eq(attempts.id, attemptItems.attemptId))
     .innerJoin(exams, eq(exams.id, attempts.examId))
-    .where(and(eq(exams.orgId, orgId), eq(grades.needsReview, true), eq(attempts.isPreview, false)))
-    .groupBy(exams.id, exams.title, exams.state)
+    .innerJoin(courses, eq(courses.id, exams.courseId))
+    .where(and(eq(exams.orgId, scope.orgId), inScope(exams.courseId, scope), eq(grades.needsReview, true), eq(attempts.isPreview, false)))
+    .groupBy(exams.id, exams.title, exams.state, courses.title)
     .orderBy(asc(exams.title));
 }
 
@@ -40,7 +43,7 @@ export interface ReviewItem {
  * The marking queue for one exam, one question at a time ("grade one question
  * across all students"). Students are anonymous unless `reveal` is set.
  */
-export async function loadReviewQueue(orgId: string, examId: string, questionId: string | undefined, reveal: boolean) {
+export async function loadReviewQueue(scope: Scope, examId: string, questionId: string | undefined, reveal: boolean) {
   const pending = await db
     .select({
       attemptItemId: attemptItems.id,
@@ -59,7 +62,7 @@ export async function loadReviewQueue(orgId: string, examId: string, questionId:
     .innerJoin(exams, eq(exams.id, attempts.examId))
     .innerJoin(questionVersions, eq(questionVersions.id, attemptItems.questionVersionId))
     .leftJoin(responses, eq(responses.attemptItemId, attemptItems.id))
-    .where(and(eq(exams.id, examId), eq(exams.orgId, orgId), eq(grades.needsReview, true), eq(attempts.isPreview, false)))
+    .where(and(eq(exams.id, examId), eq(exams.orgId, scope.orgId), inScope(exams.courseId, scope), eq(grades.needsReview, true), eq(attempts.isPreview, false)))
     .orderBy(asc(attempts.startedAt), asc(attemptItems.position));
 
   const byQuestion = new Map<string, { questionId: string; label: string; count: number }>();
@@ -80,8 +83,12 @@ export async function loadReviewQueue(orgId: string, examId: string, questionId:
   const rank = new Map(order.map((a, i) => [a.id, i + 1]));
 
   let names = new Map<string, string>();
-  if (reveal) {
-    const people = await db.select({ id: profiles.id, name: profiles.fullName, email: profiles.email }).from(profiles).where(eq(profiles.orgId, orgId));
+  const shownUsers = [...new Set(pending.filter((p) => p.questionId === current).map((p) => p.userId))];
+  if (reveal && shownUsers.length > 0) {
+    const people = await db
+      .select({ id: profiles.id, name: profiles.fullName, email: profiles.email })
+      .from(profiles)
+      .where(inArray(profiles.id, shownUsers));
     names = new Map(people.map((p) => [p.id, p.name ?? p.email]));
   }
 
@@ -103,6 +110,7 @@ export async function saveReview(
   user: CurrentUser,
   input: { attemptItemId: string; ticked: string[] },
 ): Promise<ActionResult> {
+  const scope = await scopeFor(user);
   return db.transaction(async (tx) => {
     const [row] = await tx
       .select({
@@ -114,15 +122,17 @@ export async function saveReview(
         attemptId: attemptItems.attemptId,
         type: questionVersions.type,
         orgId: attempts.orgId,
+        courseId: exams.courseId,
       })
       .from(grades)
       .innerJoin(attemptItems, eq(attemptItems.id, grades.attemptItemId))
       .innerJoin(attempts, eq(attempts.id, attemptItems.attemptId))
+      .innerJoin(exams, eq(exams.id, attempts.examId))
       .innerJoin(questionVersions, eq(questionVersions.id, attemptItems.questionVersionId))
       .where(eq(grades.attemptItemId, input.attemptItemId))
       .for("update")
       .limit(1);
-    if (!row || row.orgId !== user.orgId) return { ok: false as const, error: "That answer no longer exists." };
+    if (!row || row.orgId !== user.orgId || !canTeach(scope, row.courseId)) return { ok: false as const, error: "That answer no longer exists." };
     if (!row.needsReview) return { ok: false as const, error: "That answer has already been marked." };
     if (!getQuestionType(row.type).manual) return { ok: false as const, error: "That question is marked automatically." };
 

@@ -4,6 +4,7 @@ import { db } from "@/db/client";
 import { examCodes } from "@/db/schema";
 import type { CurrentUser } from "@/server/auth";
 import { writeAudit } from "@/server/authoring/audit";
+import { scopeFor } from "@/server/access";
 import { getExam } from "@/server/authoring/data";
 import type { ActionResult } from "@/server/authoring/questions";
 
@@ -31,7 +32,7 @@ export async function createCodes(
   n: number,
 ): Promise<ActionResult<{ codes: string[] }>> {
   if (!Number.isInteger(n) || n < 1 || n > 500) return { ok: false, error: "Choose between 1 and 500 codes." };
-  const exam = await getExam(user.orgId, examId);
+  const exam = await getExam(await scopeFor(user), examId);
   if (!exam) return { ok: false, error: "That exam no longer exists." };
 
   const codes = Array.from({ length: n }, makeCode);

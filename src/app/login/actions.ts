@@ -28,8 +28,16 @@ export async function signIn(_prev: SignInState, formData: FormData): Promise<Si
 
   // Go straight to the role's home: a second redirect from "/" would leave the
   // address bar on "/" while showing the home page.
-  const [profile] = await db.select({ role: profiles.role }).from(profiles).where(eq(profiles.id, data.user.id)).limit(1);
-  redirect(profile ? homeFor(profile.role) : "/");
+  const [profile] = await db
+    .select({ role: profiles.role, deactivatedAt: profiles.deactivatedAt })
+    .from(profiles)
+    .where(eq(profiles.id, data.user.id))
+    .limit(1);
+  if (!profile || profile.deactivatedAt) {
+    await supabase.auth.signOut();
+    return { error: "This account has been switched off. Ask your administrator." };
+  }
+  redirect(homeFor(profile.role));
 }
 
 export async function signOut() {

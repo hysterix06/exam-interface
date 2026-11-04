@@ -12,6 +12,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { authUsers } from "drizzle-orm/supabase";
@@ -42,6 +43,8 @@ export const questionStatus = pgEnum("question_status", [
 ]);
 export const gradedBy = pgEnum("graded_by", ["auto", "user"]);
 export const extensionKind = pgEnum("extension_kind", ["multiplier", "minutes"]);
+// A person's part in one course. Instructors only see courses they teach.
+export const courseRole = pgEnum("course_role", ["teacher", "student"]);
 
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -59,6 +62,8 @@ const orgId = () =>
 export const orgs = pgTable("orgs", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
+  // OrgSettings (src/server/admin/org.ts): defaults for new exams.
+  settings: jsonb("settings").notNull().default({}),
   createdAt: createdAt(),
 });
 
@@ -72,16 +77,19 @@ export const profiles = pgTable("profiles", {
   role: userRole("role").notNull().default("student"),
   email: text("email").notNull(),
   fullName: text("full_name"),
+  // Deactivated people can't sign in; their attempts and history stay.
+  deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
   createdAt: createdAt(),
-});
+}, (t) => [index("profiles_org_idx").on(t.orgId)]);
 
 export const courses = pgTable("courses", {
   id: uuid("id").primaryKey().defaultRandom(),
   orgId: orgId(),
   code: text("code"),
   title: text("title").notNull(),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: createdAt(),
-});
+}, (t) => [index("courses_org_idx").on(t.orgId)]);
 
 export const enrollments = pgTable(
   "enrollments",
@@ -92,9 +100,10 @@ export const enrollments = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => profiles.id, { onDelete: "cascade" }),
+    role: courseRole("role").notNull().default("student"),
     createdAt: createdAt(),
   },
-  (t) => [primaryKey({ columns: [t.courseId, t.userId] })],
+  (t) => [primaryKey({ columns: [t.courseId, t.userId] }), index("enrollments_user_idx").on(t.userId)],
 );
 
 export const topics = pgTable(
@@ -137,7 +146,7 @@ export const questions = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index("questions_topic_idx").on(t.topicId)],
+  (t) => [index("questions_topic_idx").on(t.topicId), index("questions_org_status_idx").on(t.orgId, t.status)],
 );
 
 export const questionVersions = pgTable(
@@ -183,7 +192,7 @@ export const exams = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [index("exams_course_idx").on(t.courseId)],
+  (t) => [index("exams_course_idx").on(t.courseId), index("exams_org_state_idx").on(t.orgId, t.state)],
 );
 
 export const examCodes = pgTable(
@@ -225,8 +234,12 @@ export const attempts = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [
-    index("attempts_exam_idx").on(t.examId),
+    index("attempts_exam_user_idx").on(t.examId, t.userId),
     index("attempts_user_idx").on(t.userId),
+    // One live attempt per student per exam; a double-click start resumes instead.
+    uniqueIndex("attempts_one_live_uq")
+      .on(t.examId, t.userId)
+      .where(sql`${t.state} = 'in_progress' and not ${t.isPreview}`),
   ],
 );
 
@@ -245,7 +258,10 @@ export const attemptItems = pgTable(
     instance: jsonb("instance").notNull(),
     flagged: boolean("flagged").notNull().default(false),
   },
-  (t) => [unique("attempt_items_attempt_position_uq").on(t.attemptId, t.position)],
+  (t) => [
+    unique("attempt_items_attempt_position_uq").on(t.attemptId, t.position),
+    index("attempt_items_version_idx").on(t.questionVersionId),
+  ],
 );
 
 export const responses = pgTable("responses", {
@@ -276,7 +292,7 @@ export const grades = pgTable("grades", {
   overrideReason: text("override_reason"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
-});
+}, (t) => [index("grades_needs_review_idx").on(t.attemptItemId).where(sql`${t.needsReview}`)]);
 
 // Integrity signals (blur, paste, reconnect, idle). Logged, never enforced.
 export const events = pgTable(
@@ -307,7 +323,10 @@ export const auditLog = pgTable(
     reason: text("reason"),
     ts: timestamp("ts", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("audit_log_entity_idx").on(t.entityType, t.entityId)],
+  (t) => [
+    index("audit_log_entity_idx").on(t.entityType, t.entityId),
+    index("audit_log_org_ts_idx").on(t.orgId, t.ts.desc()),
+  ],
 );
 
 // Accommodations. exam_id null = applies to every exam for this student.
@@ -326,5 +345,5 @@ export const extensions = pgTable(
     createdBy: uuid("created_by").references(() => profiles.id),
     createdAt: createdAt(),
   },
-  (t) => [index("extensions_user_idx").on(t.userId)],
+  (t) => [index("extensions_user_idx").on(t.userId), index("extensions_exam_idx").on(t.examId)],
 );

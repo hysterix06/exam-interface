@@ -19,7 +19,7 @@ const STUDENTS = 30;
 type Db = PostgresJsDatabase<typeof schema>;
 
 export async function seedPracticeResults(db: Db, supabase: SupabaseClient, password: string, courseId: string, authorId: string) {
-  const [existing] = await db.select({ id: schema.exams.id }).from(schema.exams).where(eq(schema.exams.title, TITLE)).limit(1);
+  const [existing] = await db.select({ id: schema.exams.id }).from(schema.exams).where(and(eq(schema.exams.title, TITLE), eq(schema.exams.courseId, courseId))).limit(1);
   if (existing) {
     console.log("  results    already present, left untouched");
     return;

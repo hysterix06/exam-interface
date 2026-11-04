@@ -10,9 +10,10 @@ import type { ActionResult } from "@/server/authoring/questions";
 import { finalizeStoredAttempt, getOwnAttempt, windowClosed } from "./take";
 
 const saveSchema = z.object({
-  attemptId: z.uuid(),
-  itemId: z.uuid(),
-  response: z.unknown(),
+  attemptId: z.guid(),
+  itemId: z.guid(),
+  // Generous for spreadsheets and long answers; stops a runaway client.
+  response: z.unknown().refine((r) => JSON.stringify(r ?? null).length <= 200_000, "That answer is too large."),
   seq: z.number().int().min(0),
 });
 
@@ -68,6 +69,9 @@ export async function setFlag(
   user: CurrentUser,
   input: { attemptId: string; itemId: string; flagged: boolean },
 ): Promise<SaveResult> {
+  if (!z.guid().safeParse(input.attemptId).success || !z.guid().safeParse(input.itemId).success) {
+    return { ok: false, error: "That attempt doesn't exist." };
+  }
   const state = await editable(user, input.attemptId);
   if (state.kind === "missing") return { ok: false, error: "That attempt doesn't exist." };
   if (state.kind === "closed") return { ok: false, error: "This attempt has ended.", closed: true };
@@ -84,12 +88,15 @@ const EVENT_TYPES = ["blur", "focus", "paste", "offline", "online", "idle"] as c
 /** Integrity signals: recorded for the instructor, never enforced. */
 export async function logEvent(user: CurrentUser, input: { attemptId: string; type: string; payload?: unknown }) {
   if (!(EVENT_TYPES as readonly string[]).includes(input.type)) return;
+  if (!z.guid().safeParse(input.attemptId).success) return;
+  const payload = input.payload === undefined || JSON.stringify(input.payload).length > 2_000 ? null : input.payload;
   const own = await getOwnAttempt(user, input.attemptId);
   if (!own || own.attempt.state !== "in_progress" || own.attempt.isPreview) return;
-  await db.insert(events).values({ attemptId: input.attemptId, type: input.type, payload: input.payload ?? null });
+  await db.insert(events).values({ attemptId: input.attemptId, type: input.type, payload });
 }
 
 export async function submitAttempt(user: CurrentUser, attemptId: string): Promise<ActionResult> {
+  if (!z.guid().safeParse(attemptId).success) return { ok: false, error: "That attempt doesn't exist." };
   const own = await getOwnAttempt(user, attemptId);
   if (!own) return { ok: false, error: "That attempt doesn't exist." };
   await finalizeStoredAttempt(attemptId);

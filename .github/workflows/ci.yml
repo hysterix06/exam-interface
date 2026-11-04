@@ -18,3 +18,9 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      # Every route is dynamic, so the build never connects; placeholders keep it honest.
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder
+          DATABASE_URL: postgresql://user:pass@localhost:5432/db

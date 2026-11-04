@@ -1,5 +1,6 @@
 "use client";
 
+import { ButtonTabs } from "@/components/ui/button-tabs";
 import { Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -111,19 +112,7 @@ export const spreadsheetUi: QuestionTypeUi<SpreadsheetDef, StudentInstance, Spre
         </div>
 
         <div className="grid gap-2">
-          <div className="flex gap-1 border-b text-sm" role="tablist" aria-label="What you are editing">
-            {MODES.map((m) => (
-              <button
-                key={m.id}
-                role="tab"
-                aria-selected={mode === m.id}
-                onClick={() => setMode(m.id)}
-                className="-mb-px border-b-2 border-transparent px-3 py-2 text-muted-foreground aria-selected:border-foreground aria-selected:text-foreground"
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+          <ButtonTabs label="What you are editing" value={mode} onChange={setMode} options={MODES.map((m) => ({ value: m.id, label: m.label }))} />
           <p className="text-xs text-muted-foreground">{MODES.find((m) => m.id === mode)!.hint}</p>
           <Grid
             rows={def.rows}
@@ -137,23 +126,23 @@ export const spreadsheetUi: QuestionTypeUi<SpreadsheetDef, StudentInstance, Spre
                     aria-pressed={isInput}
                     aria-label={`${a}${isInput ? ", student cell" : ""}`}
                     onClick={() => toggleInput(a)}
-                    className="h-8 w-full truncate px-2 text-left text-sm aria-pressed:bg-signal/15 aria-pressed:font-medium"
+                    className="h-8 w-full truncate px-2 text-left text-sm aria-pressed:bg-muted aria-pressed:font-medium"
                   >
                     {def.cells[a] ?? ""}
-                    {isInput && !def.cells[a] ? <span className="text-xs text-signal">student</span> : null}
+                    {isInput && !def.cells[a] ? <span className="text-xs text-brand">student</span> : null}
                   </button>
                 );
               }
               if (mode === "solution") {
                 return isInput ? (
-                  <Input className={`${cellInput} bg-signal/10 font-mono`} aria-label={`Solution for ${a}`} value={def.solution[a] ?? ""} onChange={(e) => set({ solution: setIn(def.solution, a, e.target.value) })} />
+                  <Input className={`${cellInput} bg-muted font-mono`} aria-label={`Solution for ${a}`} value={def.solution[a] ?? ""} onChange={(e) => set({ solution: setIn(def.solution, a, e.target.value) })} />
                 ) : (
                   <span className="block h-8 truncate px-2 py-1.5 text-muted-foreground">{def.cells[a] ?? ""}</span>
                 );
               }
               return (
                 <Input
-                  className={`${cellInput} ${isInput ? "bg-signal/10" : ""} font-mono`}
+                  className={`${cellInput} ${isInput ? "bg-muted" : ""} font-mono`}
                   aria-label={`Given ${a}`}
                   value={def.cells[a] ?? ""}
                   onChange={(e) => set({ cells: setIn(def.cells, a, e.target.value) })}
@@ -251,7 +240,7 @@ export const spreadsheetUi: QuestionTypeUi<SpreadsheetDef, StudentInstance, Spre
           cell={(a) =>
             instance.inputs.includes(a) ? (
               <Input
-                className={`${cellInput} bg-signal/10 font-mono`}
+                className={`${cellInput} bg-muted font-mono`}
                 aria-label={`Cell ${a}`}
                 autoComplete="off"
                 spellCheck={false}

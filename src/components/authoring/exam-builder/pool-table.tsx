@@ -49,7 +49,7 @@ export function PoolTable({
             return (
               <tr key={q.id} className="border-t align-top">
                 <td className="max-w-xs px-3 py-2">
-                  <Link href={`/author/questions/${q.id}`} className="hover:underline">
+                  <Link href={`/teach/questions/${q.id}`} className="hover:underline">
                     {questionNames[q.id]}
                   </Link>
                 </td>

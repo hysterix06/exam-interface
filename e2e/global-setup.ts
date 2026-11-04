@@ -1,3 +1,4 @@
+import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import postgres from "postgres";
 
@@ -15,5 +16,14 @@ export default async function globalSetup() {
     await sql`update exams set state = 'open', opens_at = null, closes_at = null where id = ${exam.id}`;
   } finally {
     await sql.end();
+  }
+
+  // People the admin spec created on earlier runs.
+  const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const { data } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+  for (const u of data?.users ?? []) {
+    if (u.email?.startsWith("e2e-")) await supabase.auth.admin.deleteUser(u.id);
   }
 }

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
-import { restoreVersionAction, saveQuestionAction } from "@/app/author/questions/actions";
+import { restoreVersionAction, saveQuestionAction } from "@/app/teach/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -95,7 +95,7 @@ export function QuestionEditor({
       if (!r.ok) return setMessage({ tone: "error", text: r.error });
       setMessage({ tone: "ok", text: `Saved as version ${r.version}.` });
       if (initial.id) router.refresh();
-      else router.replace(`/author/questions/${r.id}`);
+      else router.replace(`/teach/questions/${r.id}`);
     });
 
   const restore = (version: number) =>
@@ -178,7 +178,7 @@ export function QuestionEditor({
             <ul className="divide-y rounded-lg border text-sm">
               {versions.map((v) => (
                 <li key={v.version} className="flex items-center gap-3 px-3 py-2">
-                  <Badge tone={v.version === initial.version ? "signal" : "neutral"}>v{v.version}</Badge>
+                  <Badge tone={v.version === initial.version ? "brand" : "neutral"}>v{v.version}</Badge>
                   <span className="min-w-0 flex-1 truncate">{v.label}</span>
                   <time className="shrink-0 text-xs text-muted-foreground" dateTime={v.createdAt}>
                     {new Date(v.createdAt).toLocaleString()}

@@ -2,12 +2,12 @@ import { Badge } from "@/components/ui/badge";
 import { fmtNum } from "@/engine/grading/format";
 import type { GradeLine, GradeResult, Verdict } from "@/engine/types";
 
-const TONE: Record<Verdict, "success" | "warning" | "danger" | "neutral" | "signal"> = {
+const TONE: Record<Verdict, "success" | "warning" | "danger" | "neutral" | "brand"> = {
   correct: "success",
   partial: "warning",
   wrong: "danger",
   unanswered: "neutral",
-  review: "signal",
+  review: "brand",
 };
 
 /**

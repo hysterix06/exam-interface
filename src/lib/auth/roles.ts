@@ -5,15 +5,11 @@ export function isRole(value: unknown): value is Role {
   return typeof value === "string" && (ROLES as readonly string[]).includes(value);
 }
 
-// First matching prefix wins. Staff may open student routes (for previews);
-// students never reach authoring or admin routes.
-const ROUTE_RULES: { prefix: string; roles: readonly Role[] }[] = [
-  { prefix: "/admin", roles: ["admin", "instructor"] },
-  { prefix: "/author", roles: ["admin", "instructor"] },
-  { prefix: "/exams", roles: ROLES },
-  { prefix: "/attempt", roles: ROLES },
-  { prefix: "/exam", roles: ROLES },
-];
+export const ROLE_LABELS: Record<Role, string> = {
+  admin: "Administrator",
+  instructor: "Instructor",
+  student: "Student",
+};
 
 // /widgets holds static, public widget pages (embedded in sandboxed iframes by
 // the exam). They must never contain anything secret.
@@ -27,18 +23,13 @@ export function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((p) => matchesPrefix(pathname, p));
 }
 
-/** Roles allowed on a path, or null when the path has no role restriction. */
-export function rolesForPath(pathname: string): readonly Role[] | null {
-  return ROUTE_RULES.find((r) => matchesPrefix(pathname, r.prefix))?.roles ?? null;
-}
-
-export function canAccess(role: Role | null, pathname: string) {
-  if (isPublicPath(pathname)) return true;
-  if (!role) return false;
-  const allowed = rolesForPath(pathname);
-  return allowed === null || allowed.includes(role);
-}
-
+/**
+ * Each role has its own app: admins run the organisation, instructors teach,
+ * students take exams. Role checks live in requireRole() (the DB role), not in
+ * the proxy, because a JWT role can be up to an hour stale after a change.
+ */
 export function homeFor(role: Role) {
-  return role === "student" ? "/exams" : "/author";
+  if (role === "admin") return "/admin";
+  if (role === "instructor") return "/teach";
+  return "/";
 }

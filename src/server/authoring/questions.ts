@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
 import { questions, questionVersions, topics } from "@/db/schema";
+import { canTeach, scopeFor } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
 import { questionTypes } from "@/question-types/registry";
 import { writeAudit } from "./audit";
@@ -11,8 +12,8 @@ import { writeAudit } from "./audit";
 export type ActionResult<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 export const questionInputSchema = z.object({
-  id: z.uuid().optional(),
-  topicId: z.uuid(),
+  id: z.guid().optional(),
+  topicId: z.guid(),
   type: z.string(),
   def: z.unknown(),
   weight: z.number().min(0).max(1000),
@@ -50,12 +51,13 @@ export async function saveQuestion(
     }
   }
 
+  const scope = await scopeFor(user);
   const [topic] = await db
-    .select({ id: topics.id })
+    .select({ id: topics.id, courseId: topics.courseId })
     .from(topics)
     .where(and(eq(topics.id, q.topicId), eq(topics.orgId, user.orgId)))
     .limit(1);
-  if (!topic) return { ok: false, error: "That topic no longer exists." };
+  if (!topic || !canTeach(scope, topic.courseId)) return { ok: false, error: "That topic no longer exists." };
 
   const content = {
     type: q.type,
@@ -84,12 +86,16 @@ export async function saveQuestion(
       return { ok: true as const, id: row.id, version: 1 };
     }
 
-    const [current] = await tx
-      .select()
+    // Locked so two saves at once queue up instead of both claiming the next version.
+    const [found] = await tx
+      .select({ question: questions, courseId: topics.courseId })
       .from(questions)
+      .innerJoin(topics, eq(topics.id, questions.topicId))
       .where(and(eq(questions.id, q.id), eq(questions.orgId, user.orgId)))
+      .for("update", { of: questions })
       .limit(1);
-    if (!current) return { ok: false as const, error: "That question no longer exists." };
+    if (!found || !canTeach(scope, found.courseId)) return { ok: false as const, error: "That question no longer exists." };
+    const current = found.question;
     if (current.type !== q.type) return { ok: false as const, error: "A question's type can't be changed." };
 
     const before = {
@@ -130,12 +136,16 @@ export async function restoreVersion(
   questionId: string,
   version: number,
 ): Promise<ActionResult<{ version: number }>> {
+  const scope = await scopeFor(user);
   return db.transaction(async (tx) => {
-    const [current] = await tx
-      .select()
+    const [found] = await tx
+      .select({ question: questions, courseId: topics.courseId })
       .from(questions)
+      .innerJoin(topics, eq(topics.id, questions.topicId))
       .where(and(eq(questions.id, questionId), eq(questions.orgId, user.orgId)))
+      .for("update", { of: questions })
       .limit(1);
+    const current = found && canTeach(scope, found.courseId) ? found.question : null;
     if (!current) return { ok: false as const, error: "That question no longer exists." };
 
     const [old] = await tx

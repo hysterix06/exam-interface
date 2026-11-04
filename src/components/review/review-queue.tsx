@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { saveReviewAction } from "@/app/admin/review/actions";
+import { saveReviewAction } from "@/app/teach/actions";
 import { Button } from "@/components/ui/button";
 import { fmtNum } from "@/engine/grading/format";
 import { keywordHits, wordCount } from "@/question-types/long-answer/core";
@@ -17,7 +17,7 @@ function Highlighted({ text, keywords }: { text: string; keywords: string[] }) {
     <>
       {parts.map((p, i) =>
         terms.some((t) => t.toLowerCase() === p.toLowerCase()) ? (
-          <mark key={i} className="rounded bg-warning/30 px-0.5">
+          <mark key={i} className="rounded-sm bg-foreground/10 px-0.5 text-foreground">
             {p}
           </mark>
         ) : (

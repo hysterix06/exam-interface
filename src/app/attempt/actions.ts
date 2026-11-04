@@ -1,12 +1,14 @@
 "use server";
 
+import { z } from "zod";
 import { requireRole } from "@/server/auth";
 import { logEvent, saveResponse, setFlag, submitAttempt } from "@/server/attempts/save";
 import { startAttempt } from "@/server/attempts/start";
 
 export async function startAttemptAction(examId: string, code?: string) {
   const user = await requireRole("student");
-  return startAttempt(user, examId, code);
+  if (!z.guid().safeParse(examId).success) return { ok: false as const, error: "That exam doesn't exist." };
+  return startAttempt(user, examId, typeof code === "string" ? code.slice(0, 40) : undefined);
 }
 
 // Staff run previews through the same screen, so these accept every role; the

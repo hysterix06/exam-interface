@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { logEventAction, saveResponseAction, setFlagAction, submitAttemptAction } from "@/app/attempt/actions";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { getQuestionTypeUi } from "@/question-types/ui-registry";
 
 export interface RunnerItem {
@@ -182,12 +183,18 @@ export function AttemptRunner({
   const { Renderer } = getQuestionTypeUi(item.type);
   const answered = items.filter((i) => responses[i.id] != null).length;
   const urgent = secondsLeft !== null && secondsLeft <= 300;
+  const unansweredNumbers = items.flatMap((it, i) => (responses[it.id] == null ? [i + 1] : []));
+  const flaggedNumbers = items.flatMap((it, i) => (flagged[it.id] ? [i + 1] : []));
+  const pick = (i: number) => {
+    setConfirming(false);
+    go(i);
+  };
 
   return (
     <div className="flex min-h-screen flex-col">
       {isPreview && (
-        <p className="bg-signal px-4 py-1.5 text-center text-sm text-signal-foreground">
-          Preview: this attempt is excluded from results.
+        <p className="border-b bg-muted px-4 py-1.5 text-center text-xs text-muted-foreground">
+          Preview. This attempt never counts in results.
         </p>
       )}
       <header className="border-b">
@@ -225,9 +232,15 @@ export function AttemptRunner({
             <Button variant="outline" onClick={() => go(index - 1)} disabled={index === 0 || oneWay}>
               Previous
             </Button>
-            <Button variant="outline" onClick={() => go(index + 1)} disabled={index === items.length - 1}>
-              Next
-            </Button>
+            {index === items.length - 1 ? (
+              <Button variant="outline" onClick={() => setConfirming(true)}>
+                Finish
+              </Button>
+            ) : (
+              <Button variant="outline" onClick={() => go(index + 1)}>
+                Next
+              </Button>
+            )}
             <Button
               variant="ghost"
               onClick={toggleFlag}
@@ -255,27 +268,58 @@ export function AttemptRunner({
                 data-answered={responses[it.id] != null}
               >
                 {i + 1}
-                {flagged[it.id] && <span className="absolute -top-1 -right-1 size-2 rounded-full bg-warning" />}
+                {flagged[it.id] && <span className="absolute -top-1 -right-1 size-2 rounded-full bg-foreground ring-2 ring-background" />}
               </button>
             ))}
           </nav>
-          {confirming ? (
-            <div className="flex items-center gap-2 text-sm">
-              <span>
-                {answered < items.length ? `${items.length - answered} unanswered. ` : ""}Submit now?
-              </span>
-              <Button size="sm" onClick={() => void finish()} disabled={finishing}>
-                {finishing ? "Submitting…" : "Yes, submit"}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={finishing}>
-                Keep going
-              </Button>
-            </div>
-          ) : (
-            <Button onClick={() => setConfirming(true)}>Submit</Button>
-          )}
+          <Button onClick={() => setConfirming(true)}>Submit</Button>
         </div>
       </footer>
+
+      <Dialog open={confirming} onOpenChange={(o) => !finishing && setConfirming(o)}>
+        <DialogContent
+          title="Submit your exam?"
+          description={answered === items.length ? "You’ve answered every question. You can’t change answers after submitting." : "You can’t change answers after submitting."}
+        >
+          {(answered < items.length || flaggedNumbers.length > 0) && (
+            <div className="grid gap-3 text-sm">
+              {answered < items.length && (
+                <QuestionLinks label={`${items.length - answered} unanswered`} numbers={unansweredNumbers} onPick={pick} disabled={oneWay} />
+              )}
+              {flaggedNumbers.length > 0 && <QuestionLinks label={`${flaggedNumbers.length} flagged for review`} numbers={flaggedNumbers} onPick={pick} disabled={oneWay} />}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirming(false)} disabled={finishing}>
+              Keep working
+            </Button>
+            <Button onClick={() => void finish()} disabled={finishing}>
+              {finishing ? "Submitting…" : "Submit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function QuestionLinks({ label, numbers, onPick, disabled }: { label: string; numbers: number[]; onPick: (i: number) => void; disabled: boolean }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-muted-foreground">{label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {numbers.map((n) => (
+          <button
+            key={n}
+            type="button"
+            disabled={disabled}
+            onClick={() => onPick(n - 1)}
+            className="flex size-8 items-center justify-center rounded-md border text-xs tabular-nums hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent"
+          >
+            {n}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

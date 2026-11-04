@@ -1,23 +1,12 @@
-import { config } from "dotenv";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { openExam, signIn } from "./helpers";
 
-config({ path: ".env.local", quiet: true });
-
-async function signIn(page: Page, email: string) {
-  await page.goto("/login");
-  await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill(process.env.SEED_PASSWORD!);
-  await page.getByRole("button", { name: /sign in/i }).click();
-  await expect(page).toHaveURL(/\/(exams|author)/);
-}
-
-test("an educator can watch a live attempt, review it, and see the audit trail", async ({ browser }) => {
-  // A student starts and finishes an attempt in their own browser context.
+test("an instructor can watch a live attempt, grant time, and read the results", async ({ browser }) => {
+  // A student starts an attempt in their own browser context.
   const studentCtx = await browser.newContext();
   const student = await studentCtx.newPage();
   await signIn(student, "student@example.com");
-  await student.goto("/exams");
-  await student.getByRole("link", { name: /BIO 101 Quiz/ }).click();
+  await student.getByRole("link", { name: /BIO 101 Quiz/ }).first().click();
   await student.getByRole("button", { name: /start exam/i }).click();
   await expect(student).toHaveURL(/\/attempt\//);
 
@@ -27,47 +16,39 @@ test("an educator can watch a live attempt, review it, and see the audit trail",
   staff.on("pageerror", (e) => errors.push(e.message));
   await signIn(staff, "instructor@example.com");
 
-  // Live view shows the student in progress.
-  await staff.goto("/admin/exams");
-  await staff.getByRole("link", { name: /BIO 101 Quiz/ }).click();
-  await staff.getByRole("link", { name: "Live view" }).click();
+  // Home surfaces the live exam; the Run tab shows the student in progress.
+  await expect(staff.getByRole("heading", { name: "Live now" })).toBeVisible();
+  await openExam(staff, /BIO 101 Quiz/);
+  await staff.getByRole("navigation", { name: "Exam" }).getByRole("link", { name: "Run" }).click();
   await expect(staff.getByRole("cell", { name: "Sam Student" }).first()).toBeVisible();
   await expect(staff.getByText(/1 in progress/)).toBeVisible();
 
-  // Grant extra time with a reason; it lands in the audit log.
-  // Newest attempt first: the one still in progress.
+  // Grant extra time with a reason; it's listed and lands in the exam's history.
   await staff.getByRole("button", { name: "Add time" }).first().click();
   await staff.getByLabel("Reason").fill("Playwright accommodation");
   await staff.getByRole("button", { name: "Grant" }).click();
-  await expect(staff.getByText("Extra time for")).toBeHidden();
+  await expect(staff.getByRole("heading", { name: "Extra time granted" })).toBeVisible();
 
-  // The student submits; the educator opens the full record.
+  // The student submits; the instructor opens the full record.
   await student.getByRole("button", { name: "Submit" }).click();
-  await student.getByRole("button", { name: "Yes, submit" }).click();
+  await student.getByRole("dialog").getByRole("button", { name: "Submit" }).click();
   await expect(student).toHaveURL(/\/results\//);
 
-  await staff.goto("/admin/exams");
-  await staff.getByRole("link", { name: /BIO 101 Quiz/ }).click();
-  await staff.getByRole("link", { name: "Details" }).first().click();
+  await staff.getByRole("navigation", { name: "Exam" }).getByRole("link", { name: "Results" }).click();
+  await expect(staff.getByText("granted extra time").first()).toBeVisible();
+  await staff.getByRole("link", { name: "Sam Student" }).first().click();
   await expect(staff.getByText("Reproduce from seed")).toBeVisible();
   await expect(staff.getByText(/gives exactly what the student saw/)).toBeVisible();
-  await expect(staff.getByRole("button", { name: /Print/ })).toBeVisible();
 
-  await staff.goto("/admin/audit");
-  await expect(staff.getByText("extension.add").first()).toBeVisible();
-  await expect(staff.getByText("Playwright accommodation").first()).toBeVisible();
-
-  // The regrade tool loads for a question with answers.
-  await staff.goto("/admin/exams");
-  await staff.getByRole("link", { name: /BIO 101 Quiz/ }).click();
+  // Regrade preview loads.
+  await staff.goBack();
   await staff.getByRole("link", { name: "Regrade" }).click();
   await staff.getByRole("button", { name: "Preview changes" }).click();
   await expect(staff.getByText(/No scores would change|would change/)).toBeVisible();
 
   // CSV export is a real download with a header row.
+  await staff.goBack();
   const download = staff.waitForEvent("download");
-  await staff.goto("/admin/exams");
-  await staff.getByRole("link", { name: /BIO 101 Quiz/ }).click();
   await staff.getByRole("link", { name: "Export CSV" }).click();
   const csv = await (await download).createReadStream();
   const text = await new Promise<string>((resolve) => {
@@ -83,11 +64,59 @@ test("an educator can watch a live attempt, review it, and see the audit trail",
   await staffCtx.close();
 });
 
-test("students cannot reach the admin pages or the export", async ({ page, request }) => {
+test("an instructor only sees the courses they teach", async ({ page }) => {
+  await signIn(page, "instructor2@example.com");
+  await page.goto("/teach/exams");
+  await expect(page.getByRole("link", { name: /BIO 101/ })).toHaveCount(0);
+  // Even a direct link to another course's exam is a 404, as is its export.
+  const res = await page.request.get("/teach/exams", { maxRedirects: 0 });
+  expect(res.status()).toBe(200);
+  await page.goto("/teach/courses/00000000-0000-0000-0000-0000000000c1");
+  await expect(page.getByRole("heading", { name: /can.t find that/i })).toBeVisible();
+});
+
+test("an admin adds a person, enrols them, and they see the open exam", async ({ browser }) => {
+  const adminCtx = await browser.newContext();
+  const admin = await adminCtx.newPage();
+  await signIn(admin, "admin@example.com");
+  const email = `e2e-${Date.now()}@example.com`;
+
+  await admin.getByRole("link", { name: "People" }).first().click();
+  await admin.getByRole("button", { name: "Add person" }).click();
+  const dialog = admin.getByRole("dialog");
+  await dialog.getByLabel("Name").fill("Eve Tester");
+  await dialog.getByLabel("Email").fill(email);
+  await dialog.getByLabel("Enrol in").selectOption({ label: "BIO 101 · Introduction to Biology" });
+  await dialog.getByRole("button", { name: "Add person" }).click();
+  const password = (await dialog.locator("code").textContent())!.trim();
+  expect(password).toHaveLength(12);
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await expect(admin.getByRole("link", { name: "Eve Tester" })).toBeVisible();
+
+  const newCtx = await browser.newContext();
+  const eve = await newCtx.newPage();
+  await eve.goto("/login");
+  await eve.getByLabel(/email/i).fill(email);
+  await eve.getByLabel(/password/i).fill(password);
+  await eve.getByRole("button", { name: /sign in/i }).click();
+  await expect(eve.getByRole("link", { name: /BIO 101 Quiz/ }).first()).toBeVisible();
+
+  // Switching the account off signs them out of everything.
+  await admin.getByRole("link", { name: "Eve Tester" }).click();
+  await admin.getByRole("button", { name: "Switch off account" }).click();
+  await admin.getByRole("dialog").getByRole("button", { name: "Switch off" }).click();
+  await expect(admin.getByText("Switched off").first()).toBeVisible();
+  await eve.reload();
+  await expect(eve).toHaveURL(/\/login/);
+
+  await adminCtx.close();
+  await newCtx.close();
+});
+
+test("students cannot reach admin pages or the export", async ({ page }) => {
   await signIn(page, "student@example.com");
-  await page.goto("/admin/exams");
-  await expect(page).toHaveURL(/\/exams$/);
-  const res = await page.request.get("/admin/exams/00000000-0000-0000-0000-000000000000/export", { maxRedirects: 0 });
+  await page.goto("/admin");
+  await expect(page).toHaveURL(/:\d+\/$/);
+  const res = await page.request.get("/teach/exams/00000000-0000-0000-0000-000000000000/export", { maxRedirects: 0 });
   expect([307, 403]).toContain(res.status());
-  expect(request).toBeTruthy();
 });

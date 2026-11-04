@@ -1,10 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import { canAccess, homeFor, isPublicPath, isRole } from "@/lib/auth/roles";
+import { homeFor, isPublicPath, isRole } from "@/lib/auth/roles";
 
-// Refreshes the Supabase session cookie on every request and does an
-// optimistic role check from the JWT. This is a UX redirect, not the security
-// boundary: every page and server action re-checks with requireRole().
+// Refreshes the Supabase session cookie on every request and sends signed-out
+// visitors to /login. Roles are not checked here: the JWT role can be stale
+// after an admin changes it, which would bounce between homes. Every page and
+// server action authorizes with requireRole(), which reads the DB.
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -43,12 +44,12 @@ export async function proxy(request: NextRequest) {
     return redirect;
   };
 
-  if (role && (pathname === "/" || isPublicPath(pathname))) {
-    return redirectTo(homeFor(role));
+  if (pathname === "/login" && request.nextUrl.searchParams.has("inactive")) {
+    await supabase.auth.signOut();
+    return response;
   }
-  if (!canAccess(role, pathname)) {
-    return redirectTo(role ? homeFor(role) : "/login");
-  }
+  if (role && pathname === "/login") return redirectTo(homeFor(role));
+  if (!data?.claims?.sub && !isPublicPath(pathname)) return redirectTo("/login");
   return response;
 }
 

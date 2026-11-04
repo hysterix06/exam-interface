@@ -31,7 +31,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     .from(profiles)
     .where(eq(profiles.id, userId))
     .limit(1);
-  if (!profile) return null;
+  if (!profile || profile.deactivatedAt) return null;
 
   return {
     id: profile.id,
@@ -48,7 +48,9 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
  */
 export async function requireRole(...roles: Role[]): Promise<CurrentUser> {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  // Reaching here without a user means the session is valid but the profile is
+  // missing or deactivated; the proxy signs such sessions out on this URL.
+  if (!user) redirect("/login?inactive=1");
   if (roles.length > 0 && !roles.includes(user.role)) redirect(homeFor(user.role));
   return user;
 }

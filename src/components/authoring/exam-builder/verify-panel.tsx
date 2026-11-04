@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import type { AttemptPoolItem } from "@/engine/attempt";
 import { type PreflightReport, preflightExam, type PreflightStatus } from "@/engine/authoring/preflight";
@@ -28,7 +28,9 @@ export function VerifyPanel({
   pool,
   topicNames,
   questionNames,
+  autoRun = false,
 }: {
+  autoRun?: boolean;
   blueprint: Blueprint;
   settings: ExamSettings;
   pool: readonly AttemptPoolItem[];
@@ -45,14 +47,19 @@ export function VerifyPanel({
       const result = preflightExam({ blueprint, settings, pool, topicNames, questionNames });
       setReport({ result, stamp });
     });
+  // On the Verify tab the inputs are already saved, so run straight away.
+  useEffect(() => {
+    if (autoRun) runPreflight();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
+  }, []);
   const runSim = () => start(() => setSim({ result: simulate(blueprint, pool, 200), stamp }));
 
   return (
     <div className="grid gap-8">
       <section>
         <div className="mb-3 flex items-center gap-3">
-          <Button onClick={runPreflight} disabled={pending}>
-            Run pre-flight
+          <Button variant="outline" onClick={runPreflight} disabled={pending}>
+            {report ? "Run checks again" : "Run checks"}
           </Button>
           {report && report.stamp !== stamp && (
             <span className="text-sm text-warning">Out of date: you’ve changed things since this ran.</span>
@@ -124,7 +131,7 @@ export function VerifyPanel({
 function SimulationView({ sim, topicNames }: { sim: SimulationResult; topicNames: Record<string, string> }) {
   if (sim.failures > 0) {
     return (
-      <p role="alert" className="rounded-md border border-destructive/40 px-3 py-2 text-sm text-destructive">
+      <p role="alert" className="rounded-md border border-destructive/30 px-3 py-2 text-sm text-destructive">
         {sim.failures} of {sim.runs} fake exams couldn’t be built: {sim.firstFailure}
       </p>
     );
@@ -162,7 +169,7 @@ function SimulationView({ sim, topicNames }: { sim: SimulationResult; topicNames
               <span className="text-muted-foreground tabular-nums">
                 {i * 10}–{i === 9 ? 100 : i * 10 + 10}%
               </span>
-              <span className="h-3 rounded-sm bg-foreground/70" style={{ width: `${(n / peak) * 100}%`, minWidth: n ? 2 : 0 }} />
+              <span className="h-3 rounded-sm bg-foreground/60" style={{ width: `${(n / peak) * 100}%`, minWidth: n ? 2 : 0 }} />
               <span className="tabular-nums">{n}</span>
             </div>
           ))}

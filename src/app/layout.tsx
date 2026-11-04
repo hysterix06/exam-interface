@@ -15,7 +15,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Exam",
+  title: { default: "Exam", template: "%s · Exam" },
   description: "Deterministic, explainable exams.",
 };
 

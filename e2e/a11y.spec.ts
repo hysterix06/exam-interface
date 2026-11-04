@@ -1,23 +1,5 @@
-import AxeBuilder from "@axe-core/playwright";
-import { config } from "dotenv";
-import { expect, type Page, test } from "@playwright/test";
-
-config({ path: ".env.local", quiet: true });
-
-async function signIn(page: Page, email: string) {
-  await page.goto("/login");
-  await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill(process.env.SEED_PASSWORD!);
-  await page.getByRole("button", { name: /sign in/i }).click();
-  await expect(page).toHaveURL(/\/(exams|author)/);
-}
-
-// WCAG 2.1 A/AA rules. Anything axe reports here is a real barrier for someone.
-async function audit(page: Page, name: string) {
-  const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
-  const summary = results.violations.map((v) => `${v.id} (${v.impact}): ${v.nodes.length}× ${v.help} — ${v.nodes[0]?.target.join(" ")}`);
-  expect(summary, `${name} has accessibility violations`).toEqual([]);
-}
+import { expect, test } from "@playwright/test";
+import { audit, openExam, signIn } from "./helpers";
 
 test("sign-in page", async ({ page }) => {
   await page.goto("/login");
@@ -26,9 +8,11 @@ test("sign-in page", async ({ page }) => {
 
 test("student pages", async ({ page }) => {
   await signIn(page, "student@example.com");
-  await page.goto("/exams");
-  await audit(page, "exam list");
-  await page.getByRole("link", { name: /BIO 101 Quiz/ }).click();
+  await audit(page, "student home");
+  await page.goto("/results");
+  await audit(page, "results");
+  await page.goto("/");
+  await page.getByRole("link", { name: /BIO 101 Quiz/ }).first().click();
   await expect(page.getByRole("heading", { name: /BIO 101 Quiz/ })).toBeVisible();
   await audit(page, "exam info");
   await page.getByRole("button", { name: /start exam/i }).click();
@@ -37,26 +21,40 @@ test("student pages", async ({ page }) => {
   await audit(page, "exam-taking screen");
 });
 
-test("authoring pages", async ({ page }) => {
+test("teaching pages", async ({ page }) => {
   await signIn(page, "instructor@example.com");
   for (const [path, name] of [
-    ["/author", "authoring overview"],
-    ["/author/questions", "question bank"],
-    ["/author/topics", "topics"],
-    ["/author/exams", "exam list"],
-    ["/admin/exams", "run exams"],
-    ["/admin/audit", "audit log"],
+    ["/teach", "teaching home"],
+    ["/teach/questions", "question bank"],
+    ["/teach/exams", "exam list"],
+    ["/teach/marking", "marking"],
+    ["/teach/courses/00000000-0000-0000-0000-0000000000c1", "course"],
   ] as const) {
     await page.goto(path);
     await audit(page, name);
   }
-  await page.goto("/author/questions/new?type=mcq");
+  await page.goto("/teach/questions/new?type=mcq");
   await expect(page.getByText(/Live preview/)).toBeVisible();
   await audit(page, "question editor");
-  await page.goto("/author/exams");
-  await page.getByRole("link", { name: /BIO 101 Midterm/ }).click();
+  await openExam(page, /BIO 101 Midterm/);
   await expect(page.getByText("What each student gets")).toBeVisible();
   await audit(page, "exam builder");
+  await page.getByRole("navigation", { name: "Exam" }).getByRole("link", { name: "Verify" }).click();
+  await audit(page, "verify");
+});
+
+test("admin pages", async ({ page }) => {
+  await signIn(page, "admin@example.com");
+  for (const [path, name] of [
+    ["/admin", "overview"],
+    ["/admin/people", "people"],
+    ["/admin/courses", "courses"],
+    ["/admin/activity", "activity"],
+    ["/admin/settings", "settings"],
+  ] as const) {
+    await page.goto(path);
+    await audit(page, name);
+  }
 });
 
 const TYPES = ["mcq", "true-false", "dropdown", "short-answer", "ordering", "matching", "cloze", "numeric", "long-answer", "table-fill", "spreadsheet", "widget"];
@@ -64,7 +62,7 @@ const TYPES = ["mcq", "true-false", "dropdown", "short-answer", "ordering", "mat
 test("every question type's editor and preview", async ({ page }) => {
   await signIn(page, "instructor@example.com");
   for (const type of TYPES) {
-    await page.goto(`/author/questions/new?type=${type}`);
+    await page.goto(`/teach/questions/new?type=${type}`);
     await expect(page.getByText(/Live preview/)).toBeVisible();
     await audit(page, `${type} editor`);
   }

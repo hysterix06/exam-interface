@@ -44,8 +44,8 @@ export function EnterForm({
           />
         </label>
       )}
-      <Button type="submit" disabled={pending || (requireCode && !resume && !code.trim())}>
-        {pending ? "Starting…" : resume ? "Resume exam" : "Start exam"}
+      <Button type="submit" size="lg" className="w-fit bg-brand text-brand-foreground hover:bg-brand/90" disabled={pending || (requireCode && !resume && !code.trim())}>
+        {pending ? "Starting…" : resume ? "Resume" : "Start exam"}
       </Button>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
