@@ -53,10 +53,8 @@ test("an instructor can watch a live attempt, grant time, and read the results",
   await expect(staff.getByText(/Changed by .*: Playwright override/)).toBeVisible();
   await staff.goBack();
   await expect(staff.getByText(/changed a score by hand \(Sam Student, question 1\)/).first()).toBeVisible();
-  await staff.getByRole("link", { name: "Sam Student" }).first().click();
 
-  // Regrade preview loads.
-  await staff.goBack();
+  // Regrade preview loads (from the Results page we're back on).
   await staff.getByRole("link", { name: "Regrade" }).click();
   await staff.getByRole("button", { name: "Preview changes" }).click();
   await expect(staff.getByText(/No scores would change|would change/)).toBeVisible();

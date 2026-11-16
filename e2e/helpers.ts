@@ -24,6 +24,8 @@ export async function signIn(page: Page, email: string) {
 
 // WCAG 2.1 A/AA rules. Anything axe reports here is a real barrier for someone.
 export async function audit(page: Page, name: string) {
+  // Let fades finish first: mid-animation opacity reads as low contrast.
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"));
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   const summary = results.violations.map((v) => `${v.id} (${v.impact}): ${v.nodes.length}× ${v.help} — ${v.nodes[0]?.target.join(" ")}`);
   expect(summary, `${name} has accessibility violations`).toEqual([]);

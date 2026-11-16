@@ -6,7 +6,7 @@ ALTER TABLE "attempt_items" ADD COLUMN "seed_version_id" uuid;--> statement-brea
 UPDATE "attempt_items" ai
 SET "seed_version_id" = COALESCE(
   (
-    SELECT (e."locked_versions" ->> qv."question_id")::uuid
+    SELECT (e."locked_versions" ->> qv."question_id"::text)::uuid
     FROM "attempts" a
     JOIN "exams" e ON e."id" = a."exam_id"
     JOIN "question_versions" qv ON qv."id" = ai."question_version_id"

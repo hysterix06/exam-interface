@@ -62,7 +62,10 @@ test("the showcase exam renders one of every remaining question type, accessibly
   await page.getByRole("link", { name: /Lab Skills Check/ }).first().click();
   await page.getByRole("button", { name: /start exam|resume/i }).click();
   await expect(page).toHaveURL(/\/attempt\//);
-  for (let i = 1; i <= 8; i++) {
+  // Question 1 is already showing; the rest are reached through the navigator.
+  await expect(page.getByRole("heading", { name: "Question 1 of 8" })).toBeVisible();
+  await audit(page, "showcase question 1");
+  for (let i = 2; i <= 8; i++) {
     await page.getByRole("navigation", { name: "Questions" }).getByRole("button", { name: new RegExp(`^Question ${i}\\b`) }).click();
     await expect(page.getByRole("heading", { name: `Question ${i} of 8` })).toBeFocused();
     await audit(page, `showcase question ${i}`);

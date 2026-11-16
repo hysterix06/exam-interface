@@ -9,6 +9,9 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   timeout: 60_000,
+  // `next dev` compiles a route on its first visit, which can take longer than
+  // the default 5 s; a navigation that's merely slow shouldn't fail a test.
+  expect: { timeout: 15_000 },
   use: { baseURL: "http://localhost:3000", trace: "retain-on-failure" },
   webServer: {
     command: "npm run dev",

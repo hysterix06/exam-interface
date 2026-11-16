@@ -40,6 +40,7 @@ test.describe("phone layout (375px)", () => {
     await signIn(page, "instructor@example.com");
     await openExam(page, /BIO 101 Practice/);
     await page.getByRole("navigation", { name: "Exam" }).getByRole("link", { name: "Results" }).click();
+    await expect(page).toHaveURL(/\/results$/);
     await expect(page.getByRole("heading", { name: "Students" })).toBeVisible();
     let o = await overflow(page);
     expect(o.scroll, "results overflows").toBeLessThanOrEqual(o.view);
@@ -75,7 +76,7 @@ test("moving between questions keeps keyboard focus on the question, and the tim
   await expect(page.getByRole("timer")).toHaveAccessibleName(/^Time left \d/);
 
   // Next, the navigator and Previous all land focus on the new question's heading.
-  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
   await expect(page.getByRole("heading", { name: /Question 2 of 5/ })).toBeFocused();
   await page.getByRole("navigation", { name: "Questions" }).getByRole("button", { name: /^Question 4/ }).click();
   await expect(page.getByRole("heading", { name: /Question 4 of 5/ })).toBeFocused();
