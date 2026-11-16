@@ -22,6 +22,8 @@ export interface AttemptViewItem {
   lines: GradeLine[];
   gradedBy: string | null;
   overrideReason: string | null;
+  /** Variable values this student's version was generated with. */
+  vars: Record<string, string | number | boolean>;
 }
 
 export interface AttemptViewProps {
@@ -121,9 +123,24 @@ export function AttemptView(p: AttemptViewProps) {
                   <h3 className="mb-1 text-xs font-medium text-muted-foreground">Student&apos;s answer</h3>
                   <Renderer instance={it.redacted} value={it.response} readOnly />
                 </div>
-                <div>
-                  <h3 className="mb-1 text-xs font-medium text-muted-foreground">Answer key</h3>
-                  <Renderer instance={it.redacted} value={it.key} readOnly />
+                <div className="grid content-start gap-3">
+                  <div>
+                    <h3 className="mb-1 text-xs font-medium text-muted-foreground">Answer key</h3>
+                    <Renderer instance={it.redacted} value={it.key} readOnly />
+                  </div>
+                  {Object.keys(it.vars).length > 0 && (
+                    <section>
+                      <h3 className="mb-1 text-xs font-medium text-muted-foreground">Variables in this student&apos;s version</h3>
+                      <dl className="grid grid-cols-[auto_1fr] gap-x-4 font-mono text-xs">
+                        {Object.entries(it.vars).map(([k, v]) => (
+                          <div key={k} className="contents">
+                            <dt className="text-muted-foreground">{k}</dt>
+                            <dd>{String(v)}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </section>
+                  )}
                 </div>
               </div>
               <GradeLines result={{ score: it.score ?? 0, max: it.max ?? 0, lines: it.lines }} />

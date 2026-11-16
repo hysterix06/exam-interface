@@ -12,6 +12,7 @@ import {
   extensions,
   grades,
   profiles,
+  questions,
   questionVersions,
   responses,
   topics,
@@ -19,7 +20,9 @@ import {
 import { buildAttempt } from "@/engine/attempt";
 import { computeDeadline } from "@/engine/attempts/deadline";
 import { examSettingsSchema } from "@/engine/exam";
+import type { ItemInput, SummaryInput } from "@/engine/export";
 import { compareReproduction } from "@/engine/regrade";
+import { createRng, questionSeed } from "@/engine/rng";
 import { explainSelection } from "@/engine/selection/explain";
 import { blueprintSchema } from "@/engine/selection/types";
 import { questionLabel } from "@/lib/question-label";
@@ -86,9 +89,19 @@ export async function loadLive(scope: Scope, examId: string) {
   const itemsBy = new Map(items.map((i) => [i.attemptId, i]));
   const signalsBy = new Map(signals.map((e) => [e.attemptId, e]));
 
+  // Enrolled students with no real attempt yet: who still has to show up.
+  const started = new Set(rows.map((r) => r.userId));
+  const roster = await db
+    .select({ userId: enrollments.userId, name: profiles.fullName, email: profiles.email })
+    .from(enrollments)
+    .innerJoin(profiles, eq(profiles.id, enrollments.userId))
+    .where(and(eq(enrollments.courseId, exam.courseId), eq(enrollments.role, "student"), isNull(profiles.deactivatedAt)))
+    .orderBy(asc(profiles.fullName), asc(profiles.email));
+
   return {
     exam: { id: exam.id, title: exam.title, state: exam.state },
     now: new Date().toISOString(),
+    notStarted: roster.filter((r) => !started.has(r.userId)),
     attempts: rows.map((r) => {
       const i = itemsBy.get(r.id);
       const e = signalsBy.get(r.id);
@@ -206,8 +219,10 @@ export async function addExtension(user: CurrentUser, raw: unknown): Promise<Act
   return { ok: true };
 }
 
-export async function removeExtension(user: CurrentUser, input: { examId: string; extensionId: string }): Promise<ActionResult> {
+export async function removeExtension(user: CurrentUser, input: { examId: string; extensionId: string; reason: string }): Promise<ActionResult> {
   if (!z.guid().safeParse(input.extensionId).success) return { ok: false, error: "That extension no longer exists." };
+  const reason = typeof input.reason === "string" ? input.reason.trim().slice(0, 500) : "";
+  if (!reason) return { ok: false, error: "Give a reason. It goes in the audit log." };
   const scope = await scopeFor(user);
   const exam = await getExam(scope, input.examId);
   if (!exam) return { ok: false, error: "That exam no longer exists." };
@@ -219,7 +234,15 @@ export async function removeExtension(user: CurrentUser, input: { examId: string
     await tx.delete(extensions).where(eq(extensions.id, ext.id));
     await recomputeDeadlines(tx, ext.examId ? exam : null, ext.userId);
     await writeAudit(
-      { orgId: user.orgId, actorId: user.id, action: "extension.remove", entityType: "exam", entityId: exam.id, before: { userId: ext.userId, kind: ext.kind, value: ext.value } },
+      {
+        orgId: user.orgId,
+        actorId: user.id,
+        action: "extension.remove",
+        entityType: "exam",
+        entityId: exam.id,
+        before: { userId: ext.userId, kind: ext.kind, value: ext.value, allExams: ext.examId === null, reason: ext.reason },
+        reason,
+      },
       tx,
     );
   });
@@ -257,11 +280,13 @@ export async function listExamAttempts(scope: Scope, examId: string) {
   return db
     .select({
       id: attempts.id,
+      userId: attempts.userId,
       name: profiles.fullName,
       email: profiles.email,
       state: attempts.state,
       score: attempts.score,
       maxScore: attempts.maxScore,
+      seed: attempts.seed,
       startedAt: attempts.startedAt,
       submittedAt: attempts.submittedAt,
     })
@@ -270,6 +295,71 @@ export async function listExamAttempts(scope: Scope, examId: string) {
     .innerJoin(exams, eq(exams.id, attempts.examId))
     .where(and(eq(attempts.examId, examId), eq(attempts.isPreview, false)))
     .orderBy(asc(profiles.email), asc(attempts.startedAt));
+}
+
+/** The summary CSV: every real attempt with its extra time and integrity signals. */
+export async function listExportSummary(scope: Scope, examId: string): Promise<SummaryInput[]> {
+  const [rows, exts, signals] = await Promise.all([
+    listExamAttempts(scope, examId),
+    listExtensions(scope, examId),
+    db
+      .select({
+        attemptId: events.attemptId,
+        blurs: sql<number>`count(*) filter (where ${events.type} = 'blur')::int`,
+        pastes: sql<number>`count(*) filter (where ${events.type} = 'paste')::int`,
+      })
+      .from(events)
+      .innerJoin(attempts, eq(attempts.id, events.attemptId))
+      .where(and(eq(attempts.examId, examId), eq(attempts.isPreview, false)))
+      .groupBy(events.attemptId),
+  ]);
+  const sig = new Map(signals.map((e) => [e.attemptId, e]));
+  return rows.map((r) => ({
+    attemptId: r.id,
+    name: r.name,
+    email: r.email,
+    state: r.state,
+    score: r.score,
+    maxScore: r.maxScore,
+    startedAt: r.startedAt,
+    submittedAt: r.submittedAt,
+    seed: r.seed,
+    extensions: exts.filter((e) => e.userId === r.userId),
+    blurs: sig.get(r.id)?.blurs ?? 0,
+    pastes: sig.get(r.id)?.pastes ?? 0,
+  }));
+}
+
+/** The per-answer CSV: one row per question per real attempt. */
+export async function listExportItems(scope: Scope, examId: string): Promise<ItemInput[]> {
+  const exam = await getExam(scope, examId);
+  if (!exam) return [];
+  await sweepExpired(exam);
+  const rows = await db
+    .select({
+      attemptId: attempts.id,
+      name: profiles.fullName,
+      email: profiles.email,
+      position: attemptItems.position,
+      def: questionVersions.def,
+      topic: topics.name,
+      version: questionVersions.version,
+      score: grades.score,
+      max: grades.max,
+      gradedBy: grades.gradedBy,
+      needsReview: grades.needsReview,
+      overrideReason: grades.overrideReason,
+    })
+    .from(attemptItems)
+    .innerJoin(attempts, eq(attempts.id, attemptItems.attemptId))
+    .innerJoin(profiles, eq(profiles.id, attempts.userId))
+    .innerJoin(questionVersions, eq(questionVersions.id, attemptItems.questionVersionId))
+    .innerJoin(questions, eq(questions.id, questionVersions.questionId))
+    .leftJoin(topics, eq(topics.id, questions.topicId))
+    .leftJoin(grades, eq(grades.attemptItemId, attemptItems.id))
+    .where(and(eq(attempts.examId, examId), eq(attempts.isPreview, false)))
+    .orderBy(asc(profiles.email), asc(attempts.startedAt), asc(attemptItems.position));
+  return rows.map(({ def, ...r }) => ({ ...r, question: questionLabel(def, 200) }));
 }
 
 /** One student's whole attempt: what they saw, said, and how it was scored. */
@@ -320,10 +410,23 @@ export async function loadAttemptDetail(scope: Scope, examId: string, attemptId:
     attempt: row.attempt,
     exam: row.exam,
     student: row.name ?? row.email,
-    items: items.map((i) => ({ ...i, key: getQuestionType(i.type).keyResponse(i.instance), label: questionLabel(i.def, 90) })),
+    items: items.map((i) => ({ ...i, key: getQuestionType(i.type).keyResponse(i.instance), label: questionLabel(i.def, 90), vars: varsFor(row.attempt.seed, i) })),
     signals: Object.fromEntries(signals.map((s) => [s.type, s.n])),
     reproduction,
   };
+}
+
+/**
+ * The variable values behind one item, re-derived from its seed. Generation is
+ * pure, so nothing extra has to be stored; the stored instance stays the record.
+ */
+function varsFor(attemptSeed: string, i: { type: string; def: unknown; seedVersionId: string }): Record<string, string | number | boolean> {
+  try {
+    const type = getQuestionType(i.type);
+    return type.generate(type.defSchema.parse(i.def), createRng(questionSeed(attemptSeed, i.seedVersionId))).vars;
+  } catch {
+    return {};
+  }
 }
 
 /** "Reproduce": rebuild the exam from the seed and compare with what was stored. */
@@ -357,15 +460,28 @@ async function reproduce(
   }
 }
 
-/** Everything staff did to one exam, newest first. */
-export async function listExamHistory(scope: Scope, examId: string, limit = 30) {
+/**
+ * Everything staff did to one exam, newest first: entries filed against the
+ * exam itself plus those against its attempts and answers (marking, score
+ * changes, attempts ended at close), with the student they concern.
+ */
+export async function listExamHistory(scope: Scope, examId: string, limit = 40) {
   const exam = await getExam(scope, examId);
   if (!exam) return [];
-  return db
+  const attemptIds = db.select({ id: sql<string>`${attempts.id}::text` }).from(attempts).where(eq(attempts.examId, examId));
+  const itemIds = db
+    .select({ id: sql<string>`${attemptItems.id}::text` })
+    .from(attemptItems)
+    .innerJoin(attempts, eq(attempts.id, attemptItems.attemptId))
+    .where(eq(attempts.examId, examId));
+  const rows = await db
     .select({
       id: auditLog.id,
       ts: auditLog.ts,
       action: auditLog.action,
+      entityType: auditLog.entityType,
+      entityId: auditLog.entityId,
+      before: auditLog.before,
       after: auditLog.after,
       reason: auditLog.reason,
       actor: profiles.fullName,
@@ -373,7 +489,39 @@ export async function listExamHistory(scope: Scope, examId: string, limit = 30) 
     })
     .from(auditLog)
     .leftJoin(profiles, eq(profiles.id, auditLog.actorId))
-    .where(and(eq(auditLog.orgId, scope.orgId), eq(auditLog.entityType, "exam"), eq(auditLog.entityId, examId)))
+    .where(
+      and(
+        eq(auditLog.orgId, scope.orgId),
+        or(
+          and(eq(auditLog.entityType, "exam"), eq(auditLog.entityId, examId)),
+          and(eq(auditLog.entityType, "attempt"), inArray(auditLog.entityId, attemptIds)),
+          and(eq(auditLog.entityType, "attempt_item"), inArray(auditLog.entityId, itemIds)),
+        ),
+      ),
+    )
     .orderBy(desc(auditLog.ts), desc(auditLog.id))
     .limit(limit);
+
+  // Name the student for entries about one attempt or answer.
+  const aIds = rows.filter((r) => r.entityType === "attempt").map((r) => r.entityId);
+  const iIds = rows.filter((r) => r.entityType === "attempt_item").map((r) => r.entityId);
+  const who = new Map<string, string>();
+  if (aIds.length) {
+    const found = await db
+      .select({ id: attempts.id, name: profiles.fullName, email: profiles.email })
+      .from(attempts)
+      .innerJoin(profiles, eq(profiles.id, attempts.userId))
+      .where(inArray(attempts.id, aIds));
+    for (const f of found) who.set(f.id, f.name ?? f.email);
+  }
+  if (iIds.length) {
+    const found = await db
+      .select({ id: attemptItems.id, position: attemptItems.position, name: profiles.fullName, email: profiles.email })
+      .from(attemptItems)
+      .innerJoin(attempts, eq(attempts.id, attemptItems.attemptId))
+      .innerJoin(profiles, eq(profiles.id, attempts.userId))
+      .where(inArray(attemptItems.id, iIds));
+    for (const f of found) who.set(f.id, `${f.name ?? f.email}, question ${f.position + 1}`);
+  }
+  return rows.map((r) => ({ ...r, subject: r.entityType === "exam" ? null : (who.get(r.entityId) ?? null) }));
 }

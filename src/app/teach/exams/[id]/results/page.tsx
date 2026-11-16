@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AuditChange } from "@/components/admin/audit-change";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -59,6 +60,9 @@ export default async function ResultsPage({ params }: PageProps<"/teach/exams/[i
               <Button asChild variant="ghost" size="sm">
                 <Link href={`${base}/results/regrade`}>Regrade</Link>
               </Button>
+              <Button asChild variant="ghost" size="sm">
+                <a href={`${base}/export?format=items`}>Answers CSV</a>
+              </Button>
               <Button asChild variant="outline" size="sm">
                 <a href={`${base}/export`}>Export CSV</a>
               </Button>
@@ -101,7 +105,7 @@ export default async function ResultsPage({ params }: PageProps<"/teach/exams/[i
       </Section>
 
       {history.length > 0 && (
-        <Section title="History" description="Everything staff have done to this exam.">
+        <Section title="History" description="Everything staff have done to this exam and its answers, with the values before and after.">
           <ol className="grid gap-2 text-sm">
             {history.map((h) => (
               <li key={h.id} className="grid grid-cols-[9rem_1fr] gap-3">
@@ -110,7 +114,9 @@ export default async function ResultsPage({ params }: PageProps<"/teach/exams/[i
                 </span>
                 <span>
                   <span className="font-medium">{h.actor ?? h.actorEmail ?? "System"}</span> {describeAction(h.action)}
+                  {h.subject ? <span> ({h.subject})</span> : null}
                   {h.reason ? <span className="text-muted-foreground"> · “{h.reason}”</span> : null}
+                  <AuditChange before={h.before} after={h.after} />
                 </span>
               </li>
             ))}
@@ -135,6 +141,9 @@ const ACTIONS: Record<string, string> = {
   "exam.regrade": "regraded a question",
   "extension.add": "granted extra time",
   "extension.remove": "removed extra time",
+  "grade.review": "marked an answer",
+  "grade.override": "changed a score by hand",
+  "attempt.closed": "ended an attempt when the exam closed",
 };
 
 function describeAction(action: string) {

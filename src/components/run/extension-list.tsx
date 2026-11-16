@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { removeExtensionAction } from "@/app/teach/actions";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { StatusText } from "@/components/ui/notice";
 import { fmtNum } from "@/engine/grading/format";
 
@@ -22,6 +23,9 @@ export function ExtensionList({ examId, extensions, canRemoveStanding }: { examI
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // The extension being removed: asks for a reason first, like granting does.
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
   return (
     <div className="grid gap-2">
       <ul className="divide-y rounded-lg border text-sm">
@@ -33,22 +37,47 @@ export function ExtensionList({ examId, extensions, canRemoveStanding }: { examI
               {e.examId === null ? "All exams · " : ""}
               {e.reason}
             </span>
-            {(e.examId !== null || canRemoveStanding) && (
+            {(e.examId !== null || canRemoveStanding) && removing !== e.id && (
               <Button
                 variant="ghost"
                 size="xs"
-                disabled={pending}
-                onClick={() =>
-                  start(async () => {
-                    const r = await removeExtensionAction({ examId, extensionId: e.id });
-                    if (!r.ok) return setError(r.error);
-                    setError(null);
-                    router.refresh();
-                  })
-                }
+                onClick={() => {
+                  setRemoving(e.id);
+                  setReason("");
+                  setError(null);
+                }}
               >
                 Remove
               </Button>
+            )}
+            {removing === e.id && (
+              <form
+                className="flex w-full flex-wrap items-center gap-2"
+                onSubmit={(ev) => {
+                  ev.preventDefault();
+                  start(async () => {
+                    const r = await removeExtensionAction({ examId, extensionId: e.id, reason });
+                    if (!r.ok) return setError(r.error);
+                    setError(null);
+                    setRemoving(null);
+                    router.refresh();
+                  });
+                }}
+              >
+                <Input
+                  className="max-w-sm flex-1"
+                  value={reason}
+                  onChange={(ev) => setReason(ev.target.value)}
+                  placeholder="Reason (recorded in the audit log)"
+                  aria-label={`Reason for removing ${e.name ?? e.email}'s extra time`}
+                />
+                <Button type="submit" variant="outline" size="xs" disabled={pending || !reason.trim()}>
+                  Remove time
+                </Button>
+                <Button type="button" variant="ghost" size="xs" onClick={() => setRemoving(null)}>
+                  Cancel
+                </Button>
+              </form>
             )}
           </li>
         ))}

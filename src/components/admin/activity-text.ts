@@ -35,6 +35,7 @@ const WORDS: Record<string, string> = {
   "topic.rename": "renamed a topic",
   "topic.delete": "deleted a topic",
   "grade.review": "marked an answer",
+  "grade.override": "changed a score by hand",
   "attempt.closed": "ended an attempt when the exam closed",
 };
 

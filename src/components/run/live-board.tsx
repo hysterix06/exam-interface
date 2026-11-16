@@ -25,7 +25,9 @@ export function LiveBoard({ initial }: { initial: Live }) {
   const [data, setData] = useState(initial);
   const [now, setNow] = useState(() => Date.parse(initial.now));
   const offset = useRef(0);
+  // The student whose extra-time form is open, by user id.
   const [open, setOpen] = useState<string | null>(null);
+  const students = [...data.attempts, ...data.notStarted];
 
   useEffect(() => {
     offset.current = Date.parse(initial.now) - Date.now();
@@ -93,7 +95,7 @@ export function LiveBoard({ initial }: { initial: Live }) {
                       {a.blurs} blur · {a.pastes} paste
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <Button variant="ghost" size="xs" onClick={() => setOpen(open === a.id ? null : a.id)}>
+                      <Button variant="ghost" size="xs" onClick={() => setOpen(open === a.userId ? null : a.userId)}>
                         Add time
                       </Button>
                     </td>
@@ -104,13 +106,26 @@ export function LiveBoard({ initial }: { initial: Live }) {
           </table>
         </div>
       )}
-      {open && (
-        <ExtensionForm
-          key={open}
-          examId={data.exam.id}
-          attempt={data.attempts.find((a) => a.id === open)!}
-          onDone={() => setOpen(null)}
-        />
+      {data.notStarted.length > 0 && (
+        <section className="grid gap-2" aria-labelledby="not-started">
+          <h3 id="not-started" className="text-sm font-medium">
+            Not started <span className="font-normal text-muted-foreground">({data.notStarted.length})</span>
+          </h3>
+          <ul className="divide-y rounded-lg border text-sm">
+            {data.notStarted.map((s) => (
+              <li key={s.userId} className="flex items-center gap-2 px-3 py-1.5">
+                <span className="min-w-0 truncate">{s.name ?? s.email}</span>
+                {s.name && <span className="hidden truncate text-muted-foreground sm:inline">{s.email}</span>}
+                <Button variant="ghost" size="xs" className="ml-auto" onClick={() => setOpen(open === s.userId ? null : s.userId)}>
+                  Add time
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {open && students.some((s) => s.userId === open) && (
+        <ExtensionForm key={open} examId={data.exam.id} student={students.find((s) => s.userId === open)!} onDone={() => setOpen(null)} />
       )}
     </div>
   );
@@ -118,11 +133,11 @@ export function LiveBoard({ initial }: { initial: Live }) {
 
 function ExtensionForm({
   examId,
-  attempt,
+  student,
   onDone,
 }: {
   examId: string;
-  attempt: Live["attempts"][number];
+  student: { userId: string; name: string | null; email: string };
   onDone: () => void;
 }) {
   const router = useRouter();
@@ -138,14 +153,14 @@ function ExtensionForm({
       onSubmit={(e) => {
         e.preventDefault();
         start(async () => {
-          const r = await addExtensionAction({ examId, userId: attempt.userId, kind, value: Number(value), reason });
+          const r = await addExtensionAction({ examId, userId: student.userId, kind, value: Number(value), reason });
           if (!r.ok) return setError(r.error);
           onDone();
           router.refresh();
         });
       }}
     >
-      <p className="text-sm font-medium sm:col-span-4">Extra time for {attempt.name ?? attempt.email}</p>
+      <p className="text-sm font-medium sm:col-span-4">Extra time for {student.name ?? student.email}</p>
       <Select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} aria-label="Kind">
         <option value="minutes">Extra minutes</option>
         <option value="multiplier">Time multiplier (e.g. 1.25)</option>

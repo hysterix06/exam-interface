@@ -76,7 +76,15 @@ export async function finalizeStoredAttempt(attemptId: string, actorId?: string,
       .returning();
     if (actorId && reason !== "submit") {
       await writeAudit(
-        { orgId: attempt.orgId, actorId, action: `attempt.${reason}`, entityType: "attempt", entityId: attemptId },
+        {
+          orgId: attempt.orgId,
+          actorId,
+          action: `attempt.${reason}`,
+          entityType: "attempt",
+          entityId: attemptId,
+          before: { state: attempt.state, deadlineAt: attempt.deadlineAt },
+          after: { state: updated.state, score: updated.score, maxScore: updated.maxScore },
+        },
         tx,
       );
     }

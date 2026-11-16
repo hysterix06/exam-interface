@@ -45,6 +45,7 @@ export default async function AttemptDetailPage({ params }: PageProps<"/teach/ex
           lines: (i.lines ?? []) as never,
           gradedBy: i.gradedBy,
           overrideReason: i.overrideReason,
+          vars: i.vars,
         }))}
       />
     </>

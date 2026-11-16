@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { activityText } from "@/components/admin/activity-text";
+import { AuditChange as Change } from "@/components/admin/audit-change";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -13,29 +14,6 @@ import { activityEntities, listActivity } from "@/server/admin/org";
 export const metadata: Metadata = { title: "Activity" };
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
-
-function Change({ before, after }: { before: unknown; after: unknown }) {
-  if (before == null && after == null) return null;
-  return (
-    <details className="mt-1">
-      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">Details</summary>
-      <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
-        {before != null && (
-          <pre className="overflow-x-auto rounded-md border bg-muted/40 p-2 font-mono">
-            <span className="text-muted-foreground">Before </span>
-            {JSON.stringify(before, null, 2)}
-          </pre>
-        )}
-        {after != null && (
-          <pre className="overflow-x-auto rounded-md border bg-muted/40 p-2 font-mono">
-            <span className="text-muted-foreground">After </span>
-            {JSON.stringify(after, null, 2)}
-          </pre>
-        )}
-      </div>
-    </details>
-  );
-}
 
 export default async function ActivityPage({ searchParams }: PageProps<"/admin/activity">) {
   const { user } = await requireAdmin();

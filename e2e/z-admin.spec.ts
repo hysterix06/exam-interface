@@ -22,6 +22,8 @@ test("an instructor can watch a live attempt, grant time, and read the results",
   await staff.getByRole("navigation", { name: "Exam" }).getByRole("link", { name: "Run" }).click();
   await expect(staff.getByRole("cell", { name: "Sam Student" }).first()).toBeVisible();
   await expect(staff.getByText(/1 in progress/)).toBeVisible();
+  // Enrolled students who haven't started are listed too.
+  await expect(staff.getByRole("heading", { name: /Not started/ })).toBeVisible();
 
   // Grant extra time with a reason; it's listed and lands in the exam's history.
   await staff.getByRole("button", { name: "Add time" }).first().click();
@@ -49,6 +51,9 @@ test("an instructor can watch a live attempt, grant time, and read the results",
   await expect(dlg).toBeHidden();
   await expect(staff.getByText("score changed by hand").first()).toBeVisible();
   await expect(staff.getByText(/Changed by .*: Playwright override/)).toBeVisible();
+  await staff.goBack();
+  await expect(staff.getByText(/changed a score by hand \(Sam Student, question 1\)/).first()).toBeVisible();
+  await staff.getByRole("link", { name: "Sam Student" }).first().click();
 
   // Regrade preview loads.
   await staff.goBack();
@@ -56,18 +61,25 @@ test("an instructor can watch a live attempt, grant time, and read the results",
   await staff.getByRole("button", { name: "Preview changes" }).click();
   await expect(staff.getByText(/No scores would change|would change/)).toBeVisible();
 
-  // CSV export is a real download with a header row.
+  // Both CSV exports are real downloads with a header row.
   await staff.goBack();
-  const download = staff.waitForEvent("download");
-  await staff.getByRole("link", { name: "Export CSV" }).click();
-  const csv = await (await download).createReadStream();
-  const text = await new Promise<string>((resolve) => {
-    let out = "";
-    csv.on("data", (c) => (out += c));
-    csv.on("end", () => resolve(out));
-  });
-  expect(text.split("\r\n")[0]).toBe("Student,Email,Status,Score,Out of,Percent,Started,Submitted");
-  expect(text).toContain("student@example.com");
+  const read = async (link: string) => {
+    const download = staff.waitForEvent("download");
+    await staff.getByRole("link", { name: link }).click();
+    const csv = await (await download).createReadStream();
+    return new Promise<string>((resolve) => {
+      let out = "";
+      csv.on("data", (c) => (out += c));
+      csv.on("end", () => resolve(out));
+    });
+  };
+  const summary = await read("Export CSV");
+  expect(summary.split("\r\n")[0]).toBe("Student,Email,Status,Score,Out of,Percent,Started,Submitted,Extra time,Tab switches,Pastes,Attempt ID,Seed");
+  expect(summary).toContain("student@example.com");
+  expect(summary).toContain("+10 min");
+  const answers = await read("Answers CSV");
+  expect(answers.split("\r\n")[0]).toBe("Student,Email,Attempt ID,Question #,Question,Topic,Version,Score,Out of,Graded by,Needs marking,Score changed by hand");
+  expect(answers).toContain("Playwright override");
 
   expect(errors).toEqual([]);
   await studentCtx.close();

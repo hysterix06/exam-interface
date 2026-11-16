@@ -80,7 +80,7 @@ export async function addExtensionAction(input: unknown) {
   return done(await addExtension(user, input));
 }
 
-export async function removeExtensionAction(input: { examId: string; extensionId: string }) {
+export async function removeExtensionAction(input: { examId: string; extensionId: string; reason: string }) {
   const { user } = await requireStaff();
   if (!id.safeParse(input.examId).success) return invalid;
   return done(await removeExtension(user, input));
