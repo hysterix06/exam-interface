@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { fmtNum } from "@/engine/grading/format";
 import type { GradeLine } from "@/engine/types";
 import { getQuestionTypeUi } from "@/question-types/ui-registry";
+import { TopicBreakdown } from "@/components/exam/topic-breakdown";
+import type { TopicMastery } from "@/engine/mastery";
 import { OverrideScore } from "./override-score";
 
 export interface AttemptViewItem {
@@ -36,6 +38,7 @@ export interface AttemptViewProps {
   isPreview: boolean;
   signals: Record<string, number>;
   reproduction: { identical: boolean; differences: string[]; notes: string[]; explanation: string[] } | null;
+  mastery: { topics: TopicMastery[]; weakest: string | null };
   /** Scores can be changed once the student has finished. */
   canOverride: boolean;
   items: AttemptViewItem[];
@@ -71,6 +74,8 @@ export function AttemptView(p: AttemptViewProps) {
           </p>
         )}
       </header>
+
+      <TopicBreakdown topics={p.mastery.topics} weakest={null} />
 
       {p.reproduction && (
         <section className="rounded-lg border p-4 text-sm print:break-inside-avoid">

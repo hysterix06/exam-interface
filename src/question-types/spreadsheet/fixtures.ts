@@ -28,4 +28,13 @@ export const spreadsheetFixtures: SpreadsheetDef[] = [
     solution: { B4: "=AVERAGE(B1:B3)" },
     checks: [{ id: "avg", cell: "B4", label: "Average score", abs: 0.01, requireFormula: false }],
   },
+  {
+    stem: "Use SUM to total the four colony counts in B5.",
+    rows: 5,
+    cols: 2,
+    cells: { A1: "Plate 1", B1: "30", A2: "Plate 2", B2: "40", A3: "Plate 3", B3: "25", A4: "Plate 4", B4: "45", A5: "Total" },
+    inputs: ["B5"],
+    solution: { B5: "=SUM(B1:B4)" },
+    checks: [{ id: "total", cell: "B5", label: "Total colonies", requireFormula: true, functions: ["SUM"] }],
+  },
 ];

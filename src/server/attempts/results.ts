@@ -1,10 +1,11 @@
 import "server-only";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { attemptItems, grades, questionVersions, responses } from "@/db/schema";
+import { attemptItems, grades, questions, questionVersions, responses, topics } from "@/db/schema";
 import { shapeItemResult, instanceFeedback, type ShownItemResult } from "@/engine/attempts/results";
 import { visibility } from "@/engine/attempts/release";
 import { examSettingsSchema } from "@/engine/exam";
+import { topicMastery } from "@/engine/mastery";
 import type { GradeLine } from "@/engine/types";
 import { getQuestionType } from "@/question-types/registry";
 import type { CurrentUser } from "@/server/auth";
@@ -34,9 +35,14 @@ export async function loadResults(user: CurrentUser, attemptId: string) {
       score: grades.score,
       max: grades.max,
       lines: grades.lines,
+      needsReview: grades.needsReview,
+      topicId: topics.id,
+      topicName: topics.name,
     })
     .from(attemptItems)
     .innerJoin(questionVersions, eq(questionVersions.id, attemptItems.questionVersionId))
+    .innerJoin(questions, eq(questions.id, questionVersions.questionId))
+    .leftJoin(topics, eq(topics.id, questions.topicId))
     .leftJoin(responses, eq(responses.attemptItemId, attemptItems.id))
     .leftJoin(grades, eq(grades.attemptItemId, attemptItems.id))
     .where(eq(attemptItems.attemptId, attempt.id))
@@ -48,6 +54,7 @@ export async function loadResults(user: CurrentUser, attemptId: string) {
     score: attempt.score ?? 0,
     max: attempt.maxScore ?? 0,
     pendingReview: attempt.state === "submitted",
+    mastery: topicMastery(rows.map((r) => ({ topicId: r.topicId, topicName: r.topicName, score: r.score ?? 0, max: r.max ?? 0, needsReview: r.needsReview ?? false }))),
     items: rows.map((r) => {
       const shown: ShownItemResult = shapeItemResult(v, {
         score: r.score ?? 0,

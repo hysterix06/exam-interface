@@ -2,6 +2,8 @@
 
 import { GradeLines } from "@/components/authoring/grade-lines";
 import { Badge } from "@/components/ui/badge";
+import type { TopicMastery } from "@/engine/mastery";
+import { TopicBreakdown } from "./topic-breakdown";
 import { fmtNum } from "@/engine/grading/format";
 import type { GradeLine } from "@/engine/types";
 import { getQuestionTypeUi } from "@/question-types/ui-registry";
@@ -23,11 +25,13 @@ export function ResultsView({
   max,
   pendingReview,
   items,
+  mastery,
 }: {
   score: number;
   max: number;
   pendingReview: boolean;
   items: ResultItem[];
+  mastery?: { topics: TopicMastery[]; weakest: string | null };
 }) {
   const pct = max > 0 ? Math.round((score / max) * 100) : 0;
   return (
@@ -44,6 +48,8 @@ export function ResultsView({
           </p>
         )}
       </section>
+
+      {mastery && <TopicBreakdown topics={mastery.topics} weakest={mastery.weakest} />}
 
       {items.some((i) => i.lines) && (
         <ol className="grid gap-6">

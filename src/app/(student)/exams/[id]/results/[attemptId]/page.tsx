@@ -37,7 +37,7 @@ export default async function ResultsPage({ params }: PageProps<"/exams/[id]/res
           Results aren’t released yet. They’ll appear here, and under Results, when your instructor releases them.
         </EmptyState>
       ) : (
-        <ResultsView score={results.score} max={results.max} pendingReview={results.pendingReview} items={results.items} />
+        <ResultsView score={results.score} max={results.max} pendingReview={results.pendingReview} items={results.items} mastery={results.mastery} />
       )}
     </>
   );

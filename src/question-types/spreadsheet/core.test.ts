@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addr, colIndex, colName, evaluateSheet, inGrid, parseAddr, sameValue, showValue } from "@/engine/sheet";
+import { addr, colIndex, colName, evaluateSheet, formulaFunctions, inGrid, isSheetFunction, parseAddr, sameValue, showValue } from "@/engine/sheet";
 import { createRng } from "@/engine/rng";
 import { spreadsheet } from "./core";
 import { spreadsheetFixtures } from "./fixtures";
@@ -42,6 +42,22 @@ describe("sheet helpers", () => {
   });
 });
 
+describe("formula functions", () => {
+  it("lists the functions a formula calls, upper-cased, ignoring text in quotes", () => {
+    expect(formulaFunctions("=SUM(D2:D3)")).toEqual(["SUM"]);
+    expect(formulaFunctions("=round(average(B1:B3), 1) + Sum(A1)")).toEqual(["ROUND", "AVERAGE", "SUM"]);
+    expect(formulaFunctions('=IF(A1>0, "SUM(", "x")')).toEqual(["IF"]);
+    expect(formulaFunctions("=A1+B1")).toEqual([]);
+    expect(formulaFunctions("SUM(A1)")).toEqual([]); // not a formula
+    expect(formulaFunctions("=LOG10(A1)")).toEqual(["LOG10"]);
+  });
+  it("knows HyperFormula's function names", () => {
+    expect(isSheetFunction("sum")).toBe(true);
+    expect(isSheetFunction("AVERAGE")).toBe(true);
+    expect(isSheetFunction("SUMM")).toBe(false);
+  });
+});
+
 describe("spreadsheet type", () => {
   const def = spreadsheet.defSchema.parse(spreadsheetFixtures[0]);
   const { instance } = spreadsheet.generate(def, createRng("s"));
@@ -68,6 +84,21 @@ describe("spreadsheet type", () => {
     expect(r.lines.map((l) => l.verdict)).toEqual(["correct", "wrong", "wrong"]);
     expect(r.lines[1].got).toBe("14");
     expect(r.lines[1].expected).toBe("24");
+  });
+
+  it("can require particular functions, and says which were used instead", () => {
+    const fn = spreadsheet.defSchema.parse(spreadsheetFixtures[2]);
+    const g = (cells: Record<string, string>) => spreadsheet.grade(fn, { cells }, { points: 1 });
+    expect(g({ B5: "=SUM(B1:B4)" }).score).toBe(1);
+    expect(g({ B5: "=sum(B1:B4)" }).score).toBe(1);
+    const added = g({ B5: "=B1+B2+B3+B4" });
+    expect(added.score).toBe(0);
+    expect(added.lines[0].note).toBe("The value is right, but B5 must use SUM; it uses no function.");
+    expect(added.lines[0].expected).toBe("140 (a formula using SUM)");
+    const other = g({ B5: "=AVERAGE(B1:B4)*4" });
+    expect(other.lines[0].note).toBe("The value is right, but B5 must use SUM; it uses AVERAGE.");
+    expect(g({ B5: "140" }).lines[0].note).toBe("The value is right, but B5 was typed in by hand. This check needs a formula.");
+    expect(g({ B5: "=SUM(B1:B3)" }).lines[0].note).toBe("Cell B5 shows 95.");
   });
 
   it("only lets students change their own cells", () => {
@@ -105,5 +136,10 @@ describe("spreadsheet type", () => {
     expect(codes({ checks: [{ id: "x", cell: "C4", label: "Empty", requireFormula: false }] })).toContain("spreadsheet.check-empty");
     expect(codes({ solution: { ...def.solution, D4: "=1/0" } })).toContain("spreadsheet.solution-error");
     expect(codes({ cells: { ...def.cells, D2: "7" } })).toContain("spreadsheet.input-prefilled");
+    const withFn = (functions: string[], d4 = def.solution.D4) =>
+      codes({ checks: [def.checks[0], def.checks[1], { ...def.checks[2], functions }], solution: { ...def.solution, D4: d4 } });
+    expect(withFn(["SUM"])).toEqual([]);
+    expect(withFn(["SUMM"])).toContain("spreadsheet.unknown-function");
+    expect(withFn(["SUM"], "=D2+D3")).toContain("spreadsheet.function-not-in-solution");
   });
 });

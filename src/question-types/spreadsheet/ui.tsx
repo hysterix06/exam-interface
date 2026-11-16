@@ -155,7 +155,7 @@ export const spreadsheetUi: QuestionTypeUi<SpreadsheetDef, StudentInstance, Spre
         <div className="grid gap-2">
           <span className="text-sm font-medium">What is graded</span>
           <p className="text-xs text-muted-foreground">
-            Each check compares one cell with the same cell under your model solution. Tick “must be a formula” to reject a number typed in by hand.
+            Each check compares one cell with the same cell under your model solution. Tick “must be a formula” to reject a number typed in by hand, and name functions (e.g. SUM) the formula has to use.
           </p>
           {def.checks.map((c, i) => (
             <div key={c.id} className="flex flex-wrap items-center gap-2">
@@ -176,6 +176,18 @@ export const spreadsheetUi: QuestionTypeUi<SpreadsheetDef, StudentInstance, Spre
                 <input type="checkbox" className="accent-foreground" checked={c.requireFormula} onChange={(e) => setCheck(c.id, { requireFormula: e.target.checked })} />
                 must be a formula
               </label>
+              <Input
+                className="w-36 font-mono uppercase"
+                aria-label={`Check ${i + 1} required functions`}
+                title="Functions the formula must use, separated by commas"
+                placeholder="must use, e.g. SUM"
+                value={(c.functions ?? []).join(", ")}
+                onChange={(e) => {
+                  const v = e.target.value.toUpperCase();
+                  // Empty entries are kept while typing ("SUM, ") and ignored when grading.
+                  setCheck(c.id, { functions: v.trim() === "" ? undefined : v.split(",").map((f) => f.trim()) });
+                }}
+              />
               <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove check ${i + 1}`} onClick={() => set({ checks: def.checks.filter((x) => x.id !== c.id) })}>
                 <X />
               </Button>

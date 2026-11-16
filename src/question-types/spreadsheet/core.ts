@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { quote, roundScore } from "@/engine/grading/format";
 import { defineQuestionType } from "@/engine/question-type";
-import { evaluateSheet, inGrid, MAX_COLS, MAX_ROWS, parseAddr, sameValue, showValue } from "@/engine/sheet";
+import { evaluateSheet, formulaFunctions, inGrid, isSheetFunction, MAX_COLS, MAX_ROWS, parseAddr, sameValue, showValue } from "@/engine/sheet";
 import type { GradeLine, PreflightIssue } from "@/engine/types";
 
 const checkSchema = z.object({
@@ -12,7 +12,12 @@ const checkSchema = z.object({
   rel: z.number().min(0).optional(),
   /** The student must have typed a formula (=...) in this cell, not just a number. */
   requireFormula: z.boolean().default(false),
+  /** The formula must call each of these functions (e.g. SUM). Implies a formula. */
+  functions: z.array(z.string()).optional(),
 });
+
+const required = (c: { functions?: string[] }) => (c.functions ?? []).map((f) => f.trim().toUpperCase()).filter(Boolean);
+const both = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
 
 const defSchema = z.object({
   stem: z.string(),
@@ -62,19 +67,24 @@ export const spreadsheet = defineQuestionType<SpreadsheetDef, SpreadsheetInstanc
 
     const lines = inst.checks.map((c): GradeLine => {
       const tol = { abs: c.abs, rel: c.rel };
-      const expected = `${showValue(key[c.cell])}${c.requireFormula ? " (typed as a formula)" : ""}`;
+      const fns = required(c);
+      const expected = `${showValue(key[c.cell])}${fns.length ? ` (a formula using ${both(fns)})` : c.requireFormula ? " (typed as a formula)" : ""}`;
       if (!answered) return { label: c.label, expected, got: "no answer", verdict: "unanswered", points: 0, max: share };
 
       const got = showValue(mine[c.cell]);
       const valueOk = sameValue(key[c.cell] ?? null, mine[c.cell] ?? null, tol);
       const typed = (entries[c.cell] ?? "").trim();
-      const formulaOk = !c.requireFormula || typed.startsWith("=");
-      const ok = valueOk && formulaOk;
+      const formulaOk = !(c.requireFormula || fns.length > 0) || typed.startsWith("=");
+      const used = formulaFunctions(typed);
+      const fnsOk = fns.every((f) => used.includes(f));
+      const ok = valueOk && formulaOk && fnsOk;
       const note = !valueOk
         ? `Cell ${c.cell} shows ${got}.`
         : !formulaOk
           ? `The value is right, but ${c.cell} was typed in by hand. This check needs a formula.`
-          : `Cell ${c.cell} shows ${got}.`;
+          : !fnsOk
+            ? `The value is right, but ${c.cell} must use ${both(fns)}; it uses ${used.length ? both(used) : "no function"}.`
+            : `Cell ${c.cell} shows ${got}.`;
       return { label: c.label, expected, got, verdict: ok ? "correct" : "wrong", points: ok ? share : 0, max: share, note };
     });
     return { score: roundScore(lines.reduce((s, l) => s + l.points, 0)), max: points, needsReview: false, lines };
@@ -109,6 +119,11 @@ export const spreadsheet = defineQuestionType<SpreadsheetDef, SpreadsheetInstanc
       if (c.requireFormula && !(def.solution[c.cell] ?? "").trim().startsWith("=")) {
         block("spreadsheet.formula-not-in-solution", `${c.cell} requires a formula, but the model solution doesn't use one there.`, "checks");
       }
+      const fns = required(c);
+      for (const f of fns) if (!isSheetFunction(f)) block("spreadsheet.unknown-function", `Check “${c.label}” requires ${quote(f)}, which isn't a spreadsheet function.`, "checks");
+      const inSolution = formulaFunctions(def.solution[c.cell] ?? "");
+      const missing = fns.filter((f) => isSheetFunction(f) && !inSolution.includes(f));
+      if (missing.length) block("spreadsheet.function-not-in-solution", `${c.cell} must use ${both(missing)}, but the model solution there doesn't.`, "checks");
     }
     if (issues.length === 0) {
       const key = evaluateSheet(def.rows, def.cols, merged(def, def.solution)).values;

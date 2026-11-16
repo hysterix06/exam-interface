@@ -21,6 +21,7 @@ import { buildAttempt } from "@/engine/attempt";
 import { computeDeadline } from "@/engine/attempts/deadline";
 import { examSettingsSchema } from "@/engine/exam";
 import type { ItemInput, SummaryInput } from "@/engine/export";
+import { topicMastery } from "@/engine/mastery";
 import { compareReproduction } from "@/engine/regrade";
 import { createRng, questionSeed } from "@/engine/rng";
 import { explainSelection } from "@/engine/selection/explain";
@@ -390,9 +391,13 @@ export async function loadAttemptDetail(scope: Scope, examId: string, attemptId:
       gradedBy: grades.gradedBy,
       needsReview: grades.needsReview,
       overrideReason: grades.overrideReason,
+      topicId: topics.id,
+      topicName: topics.name,
     })
     .from(attemptItems)
     .innerJoin(questionVersions, eq(questionVersions.id, attemptItems.questionVersionId))
+    .innerJoin(questions, eq(questions.id, questionVersions.questionId))
+    .leftJoin(topics, eq(topics.id, questions.topicId))
     .leftJoin(responses, eq(responses.attemptItemId, attemptItems.id))
     .leftJoin(grades, eq(grades.attemptItemId, attemptItems.id))
     .where(eq(attemptItems.attemptId, attemptId))
@@ -413,6 +418,7 @@ export async function loadAttemptDetail(scope: Scope, examId: string, attemptId:
     items: items.map((i) => ({ ...i, key: getQuestionType(i.type).keyResponse(i.instance), label: questionLabel(i.def, 90), vars: varsFor(row.attempt.seed, i) })),
     signals: Object.fromEntries(signals.map((s) => [s.type, s.n])),
     reproduction,
+    mastery: topicMastery(items.map((i) => ({ topicId: i.topicId, topicName: i.topicName, score: i.score ?? 0, max: i.max ?? 0, needsReview: i.needsReview ?? false }))),
   };
 }
 

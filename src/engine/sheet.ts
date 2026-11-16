@@ -99,3 +99,26 @@ export function showValue(v: CellValue | undefined): string {
   if (v === null || v === undefined) return "empty";
   return typeof v === "number" ? String(Number(v.toPrecision(12))) : String(v);
 }
+
+const FUNCTION_NAMES = new Set(HyperFormula.getRegisteredFunctionNames("enGB"));
+
+/** Is this a function the sheet engine knows (SUM, AVERAGE, ...)? Case-insensitive. */
+export function isSheetFunction(name: string): boolean {
+  return FUNCTION_NAMES.has(name.trim().toUpperCase());
+}
+
+/**
+ * The functions a formula calls, upper-cased, in order of first use. Text in
+ * quotes is ignored, so ="SUM(" doesn't count. Not a formula: none.
+ */
+export function formulaFunctions(text: string): string[] {
+  const t = text.trim();
+  if (!t.startsWith("=")) return [];
+  const code = t.replace(/"(?:[^"]|"")*"/g, '""');
+  const out: string[] = [];
+  for (const m of code.matchAll(/([A-Za-z_][A-Za-z0-9_.]*)\s*\(/g)) {
+    const name = m[1].toUpperCase();
+    if (!out.includes(name)) out.push(name);
+  }
+  return out;
+}

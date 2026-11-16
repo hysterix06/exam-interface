@@ -32,6 +32,7 @@ export default async function AttemptDetailPage({ params }: PageProps<"/teach/ex
         signals={d.signals}
         reproduction={d.reproduction}
         canOverride={d.attempt.state !== "in_progress"}
+        mastery={d.mastery}
         items={d.items.map((i) => ({
           id: i.id,
           position: i.position,
