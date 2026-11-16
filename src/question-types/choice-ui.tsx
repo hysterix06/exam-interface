@@ -23,18 +23,21 @@ export function ChoiceList({
   multiple,
   readOnly,
   onToggle,
+  labelledBy,
 }: {
   options: readonly OptionLike[];
   selected: readonly string[];
   multiple: boolean;
   readOnly?: boolean;
   onToggle?: (id: string) => void;
+  /** Id of the question stem, so the group is announced with its question. */
+  labelledBy?: string;
 }) {
   // Unique per instance: radios sharing a name would uncheck each other across
   // rows when many read-only renderers are on one page (variant explorer).
   const name = useId();
   return (
-    <div role={multiple ? "group" : "radiogroup"} className="grid gap-2">
+    <div role={multiple ? "group" : "radiogroup"} aria-labelledby={labelledBy} className="grid gap-2">
       {options.map((o) => (
         <label
           key={o.id}

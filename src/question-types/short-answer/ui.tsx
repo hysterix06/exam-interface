@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -135,11 +136,13 @@ export const shortAnswerUi: QuestionTypeUi<ShortAnswerDef, StudentInstance, Shor
   },
 
   Renderer({ instance, value, onChange, readOnly }) {
+    const stemId = useId();
     return (
       <div className="grid gap-4">
-        <p className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <p id={stemId} className="whitespace-pre-wrap text-base">{instance.stem}</p>
         <Input
           aria-label="Your answer"
+          aria-describedby={stemId}
           autoComplete="off"
           placeholder="Type your answer"
           value={value?.text ?? ""}

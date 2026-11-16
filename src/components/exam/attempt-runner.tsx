@@ -62,6 +62,9 @@ export function AttemptRunner({
     Object.fromEntries(items.map((i) => [i.id, i.flagged])),
   );
   const [status, setStatus] = useState<SaveStatus>("saved");
+  // What the screen reader hears about saving: only trouble, and recovery from
+  // it. Announcing "Saving… Saved" after every keystroke would drown the exam.
+  const [saveNews, setSaveNews] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [finishing, setFinishing] = useState(false);
 
@@ -86,17 +89,21 @@ export function AttemptRunner({
       try {
         const r = await saveResponseAction({ attemptId, itemId: id, response: value, seq });
         if (r.ok) {
-          setStatus(Object.keys(dirty.current).length ? "saving" : "saved");
+          const settled = Object.keys(dirty.current).length === 0;
+          setStatus(settled ? "saved" : "saving");
+          if (settled) setSaveNews((n) => (n ? "All answers saved." : ""));
         } else if ("closed" in r) {
           router.replace(resultsUrl);
         } else {
           dirty.current[id] ??= value;
           setStatus("error");
+          setSaveNews("Your latest answer isn’t saved yet. Retrying.");
         }
       } catch {
         // Offline or a failed request: keep the answer and retry shortly.
         dirty.current[id] ??= value;
         setStatus("error");
+        setSaveNews("Your latest answer isn’t saved yet. Retrying.");
       }
     },
     [attemptId, resultsUrl, router],
@@ -166,9 +173,20 @@ export function AttemptRunner({
     };
   }, [attemptId, isPreview]);
 
+  // After moving to another question, focus its heading so keyboard and
+  // screen-reader users land on the new question rather than on <body>.
+  const heading = useRef<HTMLHeadingElement>(null);
+  const moved = useRef(false);
+  useEffect(() => {
+    if (!moved.current) return;
+    moved.current = false;
+    heading.current?.focus();
+  }, [index]);
+
   const go = (to: number) => {
     if (to < 0 || to >= items.length || (oneWay && to < index)) return;
     void flush(items[index].id);
+    moved.current = to !== index;
     setIndex(to);
   };
 
@@ -183,6 +201,15 @@ export function AttemptRunner({
   const { Renderer } = getQuestionTypeUi(item.type);
   const answered = items.filter((i) => responses[i.id] != null).length;
   const urgent = secondsLeft !== null && secondsLeft <= 300;
+  // Spoken once at each threshold: the text only changes when a threshold is crossed.
+  const timeNews =
+    secondsLeft === null || secondsLeft > 300
+      ? ""
+      : secondsLeft === 0
+        ? "Time is up. Your exam is being submitted."
+        : secondsLeft <= 60
+          ? "One minute left."
+          : "Five minutes left.";
   const unansweredNumbers = items.flatMap((it, i) => (responses[it.id] == null ? [i + 1] : []));
   const flaggedNumbers = items.flatMap((it, i) => (flagged[it.id] ? [i + 1] : []));
   const pick = (i: number) => {
@@ -192,6 +219,12 @@ export function AttemptRunner({
 
   return (
     <div className="flex min-h-screen flex-col">
+      <a
+        href="#question"
+        className="sr-only z-50 rounded-md bg-background px-3 py-2 text-sm focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:ring-2 focus:ring-ring"
+      >
+        Skip to question
+      </a>
       {isPreview && (
         <p className="border-b bg-muted px-4 py-1.5 text-center text-xs text-muted-foreground">
           Preview. This attempt never counts in results.
@@ -199,35 +232,44 @@ export function AttemptRunner({
       )}
       <header className="border-b">
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-4 px-4 text-sm">
-          <span className="truncate font-medium">{title}</span>
-          <span className="text-muted-foreground tabular-nums">
+          <h1 className="truncate font-medium">{title}</h1>
+          <span className="text-muted-foreground tabular-nums" aria-hidden>
             {index + 1} / {items.length}
           </span>
-          <span
-            role="status"
-            className={status === "error" ? "text-destructive" : "text-muted-foreground"}
-          >
-            {status === "saved" ? "Saved" : status === "saving" ? "Saving…" : "Not saved. Retrying…"}
+          <span role="status" className={status === "error" ? "text-destructive" : "text-muted-foreground"}>
+            <span aria-hidden>{status === "saved" ? "Saved" : status === "saving" ? "Saving…" : "Not saved. Retrying…"}</span>
+            <span className="sr-only">{saveNews}</span>
           </span>
           {secondsLeft !== null && (
             <span
+              role="timer"
               className={`ml-auto font-mono tabular-nums ${urgent ? "font-semibold text-destructive" : ""}`}
               aria-label={`Time left ${clock(secondsLeft)}`}
             >
               {clock(secondsLeft)}
             </span>
           )}
+          <span className="sr-only" aria-live="assertive">
+            {timeNews}
+          </span>
         </div>
       </header>
 
       <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-10">
-        {/* A short fade between questions; off for people who ask for reduced motion. */}
-        <div key={item.id} className="grid gap-8 animate-in fade-in duration-200 motion-reduce:animate-none">
-          <Renderer
-            instance={item.instance}
-            value={responses[item.id] ?? null}
-            onChange={(v: unknown) => change(item.id, v)}
-          />
+        <div className="grid gap-8">
+          <h2 id="question" ref={heading} tabIndex={-1} className="text-xs font-medium text-muted-foreground outline-none">
+            Question {index + 1} of {items.length}
+            {flagged[item.id] ? <span className="sr-only">, flagged for review</span> : null}
+          </h2>
+          {/* A short fade between questions; off for people who ask for reduced motion. */}
+          <div key={item.id} className="animate-in fade-in duration-200 motion-reduce:animate-none">
+            <Renderer
+              instance={item.instance}
+              value={responses[item.id] ?? null}
+              onChange={(v: unknown) => change(item.id, v)}
+            />
+          </div>
+          {/* Outside the keyed block above, so these keep focus when the question changes. */}
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => go(index - 1)} disabled={index === 0 || oneWay}>
               Previous
@@ -264,7 +306,7 @@ export function AttemptRunner({
                 disabled={oneWay && i < index}
                 aria-label={`Question ${i + 1}${responses[it.id] != null ? ", answered" : ""}${flagged[it.id] ? ", flagged" : ""}`}
                 aria-current={i === index ? "step" : undefined}
-                className="relative flex size-8 items-center justify-center rounded-md border text-xs tabular-nums disabled:opacity-40 aria-[current=step]:border-foreground aria-[current=step]:font-semibold data-[answered=true]:bg-muted"
+                className="relative flex size-8 items-center justify-center rounded-md border text-xs tabular-nums focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-40 aria-[current=step]:border-foreground aria-[current=step]:font-semibold data-[answered=true]:bg-muted"
                 data-answered={responses[it.id] != null}
               >
                 {i + 1}
@@ -314,7 +356,8 @@ function QuestionLinks({ label, numbers, onPick, disabled }: { label: string; nu
             type="button"
             disabled={disabled}
             onClick={() => onPick(n - 1)}
-            className="flex size-8 items-center justify-center rounded-md border text-xs tabular-nums hover:bg-muted disabled:cursor-default disabled:hover:bg-transparent"
+            aria-label={`Go to question ${n}`}
+            className="flex size-8 items-center justify-center rounded-md border text-xs tabular-nums hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-default disabled:hover:bg-transparent"
           >
             {n}
           </button>

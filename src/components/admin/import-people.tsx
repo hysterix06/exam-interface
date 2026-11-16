@@ -118,7 +118,7 @@ export function ImportPeople({ courses }: { courses: { id: string; title: string
               {courseId ? <> to add to {courses.find((c) => c.id === courseId)?.title}</> : null}.
               {step.parse.errors.length > 0 && <span className="text-muted-foreground"> {step.parse.errors.length} lines will be skipped.</span>}
             </p>
-            <div className="max-h-64 overflow-y-auto rounded-md border text-sm">
+            <div className="max-h-64 overflow-auto rounded-md border text-sm">
               <table className="w-full">
                 <tbody>
                   {step.parse.rows.map((r) => (
@@ -171,7 +171,7 @@ export function ImportPeople({ courses }: { courses: { id: string; title: string
             {step.outcomes.some((o) => o.password) && (
               <p className="text-sm text-muted-foreground">Download the one-time passwords now. They won’t be shown again.</p>
             )}
-            <div className="max-h-64 overflow-y-auto rounded-md border text-sm">
+            <div className="max-h-64 overflow-auto rounded-md border text-sm">
               <table className="w-full">
                 <tbody>
                   {step.outcomes.map((o) => (

@@ -1,4 +1,5 @@
 "use client";
+import { useId } from "react";
 
 import { Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
@@ -60,11 +61,13 @@ export const dropdownUi: QuestionTypeUi<DropdownDef, StudentInstance, DropdownRe
   },
 
   Renderer({ instance, value, onChange, readOnly }) {
+    const stemId = useId();
     return (
       <div className="grid gap-4">
-        <p className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <p id={stemId} className="whitespace-pre-wrap text-base">{instance.stem}</p>
         <Select
           aria-label="Your answer"
+          aria-describedby={stemId}
           value={value?.selected ?? ""}
           disabled={readOnly}
           onChange={(e) => onChange?.({ selected: e.target.value })}

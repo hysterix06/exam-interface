@@ -141,6 +141,7 @@ function SimulationView({ sim, topicNames }: { sim: SimulationResult; topicNames
     <div className="grid gap-5 text-sm">
       <div>
         <h3 className="mb-2 font-medium">Topic balance</h3>
+        <div className="overflow-x-auto">
         <table className="w-full max-w-lg">
           <thead className="text-left text-xs text-muted-foreground">
             <tr>
@@ -159,6 +160,7 @@ function SimulationView({ sim, topicNames }: { sim: SimulationResult; topicNames
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <div>

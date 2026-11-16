@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -156,11 +157,13 @@ export const numericUi: QuestionTypeUi<NumericDef, StudentInstance, NumericRespo
   },
 
   Renderer({ instance, value, onChange, readOnly }) {
+    const stemId = useId();
     return (
       <div className="grid gap-4">
-        <p className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <p id={stemId} className="whitespace-pre-wrap text-base">{instance.stem}</p>
         <Input
           aria-label="Your answer"
+          aria-describedby={stemId}
           autoComplete="off"
           inputMode="decimal"
           placeholder="Type your answer"

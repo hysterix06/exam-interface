@@ -1,10 +1,26 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import jsxA11y from "eslint-plugin-jsx-a11y";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // The full recommended accessibility set; next/core-web-vitals turns on only a few.
+  // The plugin itself is already registered by eslint-config-next.
+  {
+    files: ["**/*.{jsx,tsx}"],
+    rules: {
+      ...jsxA11y.flatConfigs.recommended.rules,
+      // Our Input/Select/Textarea render real controls; let labels wrapping them count.
+      "jsx-a11y/label-has-associated-control": ["error", { controlComponents: ["Input", "Select", "Textarea"], depth: 3 }],
+      // `role` on our own components (e.g. <AddMembers role="teacher">) is a prop, not ARIA.
+      "jsx-a11y/aria-role": ["error", { ignoreNonDOM: true }],
+      // Only DOM autoFocus is banned. Components may take it for a focus the person
+      // asked for (e.g. arriving from "New exam").
+      "jsx-a11y/no-autofocus": ["error", { ignoreNonDOM: true }],
+    },
+  },
   {
     rules: {
       // `const { key: _key, ...rest } = x` is how cores redact fields.

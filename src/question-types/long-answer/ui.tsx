@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -86,14 +87,16 @@ export const longAnswerUi: QuestionTypeUi<LongAnswerDef, StudentInstance, LongAn
   },
 
   Renderer({ instance, value, onChange, readOnly }) {
+    const stemId = useId();
     const text = value?.text ?? "";
     const words = wordCount(text);
     const over = instance.maxWords !== null && words > instance.maxWords;
     return (
       <div className="grid gap-3">
-        <p className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <p id={stemId} className="whitespace-pre-wrap text-base">{instance.stem}</p>
         <Textarea
           aria-label="Your answer"
+          aria-describedby={stemId}
           className="min-h-48"
           value={text}
           readOnly={readOnly}

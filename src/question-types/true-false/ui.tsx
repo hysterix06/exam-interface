@@ -1,4 +1,5 @@
 "use client";
+import { useId } from "react";
 
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -53,14 +54,16 @@ export const trueFalseUi: QuestionTypeUi<TrueFalseDef, StudentInstance, TrueFals
   },
 
   Renderer({ instance, value, onChange, readOnly }) {
+    const stemId = useId();
     return (
       <div className="grid gap-4">
-        <p className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <p id={stemId} className="whitespace-pre-wrap text-base">{instance.stem}</p>
         <ChoiceList
           options={OPTIONS}
           selected={value ? [String(value.value)] : []}
           multiple={false}
           readOnly={readOnly}
+          labelledBy={stemId}
           onToggle={(id) => onChange?.({ value: id === "true" })}
         />
       </div>

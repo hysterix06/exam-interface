@@ -1,4 +1,5 @@
 "use client";
+import { useId } from "react";
 
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -130,16 +131,18 @@ export const mcqUi: QuestionTypeUi<McqDef, StudentInstance, McqResponse> = {
   },
 
   Renderer({ instance, value, onChange, readOnly }) {
+    const stemId = useId();
     const selected = value?.selected ?? [];
     return (
       <div className="grid gap-4">
-        <p className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <p id={stemId} className="whitespace-pre-wrap text-base">{instance.stem}</p>
         {instance.multiple ? <p className="text-xs text-muted-foreground">Select all that apply.</p> : null}
         <ChoiceList
           options={instance.options}
           selected={selected}
           multiple={instance.multiple}
           readOnly={readOnly}
+          labelledBy={stemId}
           onToggle={(id) =>
             onChange?.({
               selected: instance.multiple

@@ -1,7 +1,7 @@
 "use client";
 
-import { ErrorState } from "@/components/shell/error-state";
+import { type ErrorProps, ErrorState } from "@/components/shell/error-state";
 
-export default function Error(props: { error: Error & { digest?: string }; reset: () => void }) {
+export default function Error(props: ErrorProps) {
   return <ErrorState {...props} />;
 }

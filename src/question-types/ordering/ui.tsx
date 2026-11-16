@@ -7,7 +7,9 @@ import {
   closestCenter,
   useSensor,
   useSensors,
+  type Announcements,
   type DragEndEvent,
+  type UniqueIdentifier,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -77,11 +79,14 @@ function SortableList({
   readOnly,
   onReorder,
   render,
+  labelFor,
 }: {
   items: { id: string }[];
   readOnly?: boolean;
   onReorder: (ids: string[]) => void;
   render: (id: string) => React.ReactNode;
+  /** What a screen reader calls an item while it is dragged with the keyboard. */
+  labelFor: (id: string) => string;
 }) {
   // dnd-kit numbers its aria ids from a global counter, which differs between
   // server and client renders; an explicit id keeps hydration stable.
@@ -89,12 +94,27 @@ function SortableList({
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
   const ids = items.map((i) => i.id);
   const move = (from: number, to: number) => onReorder(arrayMove(ids, from, to));
+  // dnd-kit's default announcements read out internal ids ("a"); say the item's text and position instead.
+  const name = (id: UniqueIdentifier) => `“${labelFor(String(id)) || "item"}”`;
+  const at = (id: UniqueIdentifier | undefined) => (id === undefined ? 0 : ids.indexOf(String(id)) + 1);
+  const announcements: Announcements = {
+    onDragStart: ({ active }) => `Picked up ${name(active.id)}, position ${at(active.id)} of ${ids.length}.`,
+    onDragOver: ({ active, over }) => (over ? `${name(active.id)} is over position ${at(over.id)} of ${ids.length}.` : `${name(active.id)} is no longer over the list.`),
+    onDragEnd: ({ active, over }) => (over ? `Dropped ${name(active.id)} at position ${at(over.id)} of ${ids.length}.` : `Dropped ${name(active.id)}; order unchanged.`),
+    onDragCancel: ({ active }) => `Cancelled. ${name(active.id)} is back at position ${at(active.id)}.`,
+  };
   const onDragEnd = (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return;
     move(ids.indexOf(String(e.active.id)), ids.indexOf(String(e.over.id)));
   };
   return (
-    <DndContext id={dndId} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+    <DndContext
+      id={dndId}
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={onDragEnd}
+      accessibility={{ announcements, screenReaderInstructions: { draggable: "To move an item, press space or enter, use the arrow keys, then press space or enter again to drop it. Press escape to cancel." } }}
+    >
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
         <ol className="grid gap-2">
           {ids.map((id, i) => (
@@ -130,6 +150,7 @@ export const orderingUi: QuestionTypeUi<OrderingDef, StudentInstance, OrderingRe
           <SortableList
             items={def.items}
             onReorder={(ids) => set(ids.map((id) => def.items.find((i) => i.id === id)!))}
+            labelFor={(id) => def.items.find((i) => i.id === id)?.text ?? ""}
             render={(id) => {
               const item = def.items.find((i) => i.id === id)!;
               return (
@@ -170,6 +191,7 @@ export const orderingUi: QuestionTypeUi<OrderingDef, StudentInstance, OrderingRe
           readOnly={readOnly}
           onReorder={(order) => onChange?.({ order })}
           render={(id) => byId.get(id) ?? id}
+          labelFor={(id) => byId.get(id) ?? ""}
         />
       </div>
     );
