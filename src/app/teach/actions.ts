@@ -9,7 +9,7 @@ import { startPreviewAttempt } from "@/server/attempts/start";
 import { createExam, publishExam, saveExam, setExamState, unpublishExam } from "@/server/authoring/exams";
 import { restoreVersion, saveQuestion } from "@/server/authoring/questions";
 import { createTopic, deleteTopic, renameTopic } from "@/server/authoring/topics";
-import { saveReview } from "@/server/review";
+import { overrideGrade, saveReview } from "@/server/review";
 import { addExtension, loadLive, removeExtension, setSchedule } from "@/server/run/data";
 import { applyRegrade, previewRegrade } from "@/server/run/regrade";
 
@@ -110,6 +110,12 @@ export async function saveReviewAction(input: { attemptItemId: string; ticked: s
   const { user } = await requireStaff();
   if (!id.safeParse(input.attemptItemId).success || !Array.isArray(input.ticked)) return invalid;
   return done(await saveReview(user, { attemptItemId: input.attemptItemId, ticked: input.ticked.filter((t) => typeof t === "string").slice(0, 100) }));
+}
+
+export async function overrideGradeAction(input: { attemptItemId: string; score: number; reason: string }) {
+  const { user } = await requireStaff();
+  if (!id.safeParse(input.attemptItemId).success || typeof input.score !== "number" || typeof input.reason !== "string") return invalid;
+  return done(await overrideGrade(user, { attemptItemId: input.attemptItemId, score: input.score, reason: input.reason.slice(0, 500) }));
 }
 
 // Questions and topics

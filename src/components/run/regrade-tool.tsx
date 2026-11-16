@@ -101,6 +101,12 @@ export function RegradeTool({ examId, questions, names }: { examId: string; ques
               ? `No scores would change (${preview.total} answers checked).`
               : `${preview.changed} of ${preview.total} scores would change.`}
           </p>
+          {preview.kept.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              Kept as they are, because a person changed the score by hand:{" "}
+              {preview.kept.map((k) => `${names[k.attemptId] ?? "a student"} (${fmtNum(k.score)})`).join(", ")}.
+            </p>
+          )}
           {preview.changed > 0 && (
             <div className="overflow-x-auto rounded-lg border">
               <table className="w-full text-sm">

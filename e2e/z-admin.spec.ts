@@ -40,6 +40,16 @@ test("an instructor can watch a live attempt, grant time, and read the results",
   await expect(staff.getByText("Reproduce from seed")).toBeVisible();
   await expect(staff.getByText(/gives exactly what the student saw/)).toBeVisible();
 
+  // Change one answer's score by hand: the badge and the breakdown say who and why.
+  await staff.getByRole("button", { name: "Change score" }).first().click();
+  const dlg = staff.getByRole("dialog");
+  await dlg.getByLabel(/New score/).fill("0");
+  await dlg.getByLabel("Reason").fill("Playwright override");
+  await dlg.getByRole("button", { name: "Save score" }).click();
+  await expect(dlg).toBeHidden();
+  await expect(staff.getByText("score changed by hand").first()).toBeVisible();
+  await expect(staff.getByText(/Changed by .*: Playwright override/)).toBeVisible();
+
   // Regrade preview loads.
   await staff.goBack();
   await staff.getByRole("link", { name: "Regrade" }).click();

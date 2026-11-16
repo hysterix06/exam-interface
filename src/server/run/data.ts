@@ -289,6 +289,8 @@ export async function loadAttemptDetail(scope: Scope, examId: string, attemptId:
       position: attemptItems.position,
       instance: attemptItems.instance,
       questionVersionId: attemptItems.questionVersionId,
+      seedVersionId: attemptItems.seedVersionId,
+      version: questionVersions.version,
       type: questionVersions.type,
       def: questionVersions.def,
       response: responses.response,
@@ -296,6 +298,8 @@ export async function loadAttemptDetail(scope: Scope, examId: string, attemptId:
       max: grades.max,
       lines: grades.lines,
       gradedBy: grades.gradedBy,
+      needsReview: grades.needsReview,
+      overrideReason: grades.overrideReason,
     })
     .from(attemptItems)
     .innerJoin(questionVersions, eq(questionVersions.id, attemptItems.questionVersionId))
@@ -326,7 +330,7 @@ export async function loadAttemptDetail(scope: Scope, examId: string, attemptId:
 async function reproduce(
   exam: typeof exams.$inferSelect,
   attempt: typeof attempts.$inferSelect,
-  stored: { position: number; questionVersionId: string; instance: unknown; def: unknown }[],
+  stored: { position: number; questionVersionId: string; seedVersionId: string; version: number; type: string; instance: unknown; def: unknown }[],
 ) {
   const blueprint = blueprintSchema.safeParse(exam.blueprint);
   if (!blueprint.success) return null;
@@ -341,15 +345,15 @@ async function reproduce(
   const topicIds = [...new Set(blueprint.data.sections.map((s) => s.topicId))];
   try {
     const built = buildAttempt(attempt.seed, blueprint.data, pool);
-    const names = Object.fromEntries(stored.map((s) => [s.questionVersionId, questionLabel(s.def, 60)]));
+    const names = Object.fromEntries(stored.map((s) => [s.seedVersionId, questionLabel(s.def, 60)]));
     const topicRows = topicIds.length ? await db.select({ id: topics.id, name: topics.name }).from(topics).where(inArray(topics.id, topicIds)) : [];
     const byQ = Object.fromEntries(built.items.map((i) => [i.questionId, names[i.versionId] ?? i.questionId]));
     return {
-      ...compareReproduction({ stored, rebuilt: built.items }),
+      ...compareReproduction({ attemptSeed: attempt.seed, stored, rebuilt: built.items }),
       explanation: explainSelection(built.trace, blueprint.data, { questions: byQ, topics: Object.fromEntries(topicRows.map((t) => [t.id, t.name])) }),
     };
   } catch {
-    return { identical: false, differences: ["The exam could not be rebuilt from this seed."], explanation: [] as string[] };
+    return { identical: false, differences: ["The exam could not be rebuilt from this seed."], notes: [] as string[], explanation: [] as string[] };
   }
 }
 

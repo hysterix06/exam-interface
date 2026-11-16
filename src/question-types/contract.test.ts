@@ -60,7 +60,9 @@ describe.each([...questionTypes.values()])("$id contract", (type) => {
         expect(r.score).toBeGreaterThanOrEqual(-POINTS);
         expect(sumPoints(r.lines)).toBe(r.score);
       }
-    });
+      // Generous: the spreadsheet type evaluates a HyperFormula sheet per grade, which
+      // takes several seconds over 1,000 seeds when the suite runs in parallel.
+    }, 60_000);
 
     it("redacts the answer key", () => {
       const { instance } = type.generate(def, createRng("redact"));

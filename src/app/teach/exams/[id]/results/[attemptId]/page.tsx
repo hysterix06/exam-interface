@@ -31,6 +31,7 @@ export default async function AttemptDetailPage({ params }: PageProps<"/teach/ex
         isPreview={d.attempt.isPreview}
         signals={d.signals}
         reproduction={d.reproduction}
+        canOverride={d.attempt.state !== "in_progress"}
         items={d.items.map((i) => ({
           id: i.id,
           position: i.position,
@@ -43,6 +44,7 @@ export default async function AttemptDetailPage({ params }: PageProps<"/teach/ex
           max: i.max,
           lines: (i.lines ?? []) as never,
           gradedBy: i.gradedBy,
+          overrideReason: i.overrideReason,
         }))}
       />
     </>

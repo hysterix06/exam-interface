@@ -109,7 +109,7 @@ export async function seedPracticeResults(db: Db, supabase: SupabaseClient, pass
 
     const items = await db
       .insert(schema.attemptItems)
-      .values(built.items.map((it) => ({ attemptId: attempt.id, questionVersionId: it.versionId, position: it.position, instance: it.instance })))
+      .values(built.items.map((it) => ({ attemptId: attempt.id, questionVersionId: it.versionId, seedVersionId: it.versionId, position: it.position, instance: it.instance })))
       .returning({ id: schema.attemptItems.id, position: schema.attemptItems.position });
     const idAt = new Map(items.map((it) => [it.position, it.id]));
 

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { fmtNum } from "@/engine/grading/format";
 import type { GradeLine } from "@/engine/types";
 import { getQuestionTypeUi } from "@/question-types/ui-registry";
+import { OverrideScore } from "./override-score";
 
 export interface AttemptViewItem {
   id: string;
@@ -20,6 +21,7 @@ export interface AttemptViewItem {
   max: number | null;
   lines: GradeLine[];
   gradedBy: string | null;
+  overrideReason: string | null;
 }
 
 export interface AttemptViewProps {
@@ -31,7 +33,9 @@ export interface AttemptViewProps {
   maxScore: number | null;
   isPreview: boolean;
   signals: Record<string, number>;
-  reproduction: { identical: boolean; differences: string[]; explanation: string[] } | null;
+  reproduction: { identical: boolean; differences: string[]; notes: string[]; explanation: string[] } | null;
+  /** Scores can be changed once the student has finished. */
+  canOverride: boolean;
   items: AttemptViewItem[];
 }
 
@@ -70,7 +74,16 @@ export function AttemptView(p: AttemptViewProps) {
         <section className="rounded-lg border p-4 text-sm print:break-inside-avoid">
           <h2 className="mb-1 font-medium">Reproduce from seed</h2>
           {p.reproduction.identical ? (
-            <p className="text-success">Rebuilding this exam from its seed gives exactly what the student saw.</p>
+            <>
+              <p className="text-success">Rebuilding this exam from its seed gives exactly what the student saw.</p>
+              {p.reproduction.notes.length > 0 && (
+                <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+                  {p.reproduction.notes.map((n, i) => (
+                    <li key={i}>{n}</li>
+                  ))}
+                </ul>
+              )}
+            </>
           ) : (
             <ul className="list-disc pl-5 text-warning">
               {p.reproduction.differences.map((d, i) => (
@@ -96,7 +109,12 @@ export function AttemptView(p: AttemptViewProps) {
             <li key={it.id} className="grid gap-4 rounded-lg border p-5 print:break-inside-avoid">
               <div className="flex items-center gap-2">
                 <Badge>Question {it.position + 1}</Badge>
-                {it.gradedBy === "user" && <Badge tone="brand">marked by hand</Badge>}
+                {it.gradedBy === "user" && <Badge tone="brand">{it.overrideReason ? "score changed by hand" : "marked by hand"}</Badge>}
+                {p.canOverride && it.score !== null && it.max !== null && (
+                  <span className="ml-auto">
+                    <OverrideScore attemptItemId={it.id} position={it.position} score={it.score} max={it.max} />
+                  </span>
+                )}
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div>

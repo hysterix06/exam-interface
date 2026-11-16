@@ -96,6 +96,7 @@ async function create(
     built.items.map((i) => ({
       attemptId: a.id,
       questionVersionId: i.versionId,
+      seedVersionId: i.versionId,
       position: i.position,
       instance: i.instance,
     })),

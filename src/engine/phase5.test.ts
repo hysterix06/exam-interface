@@ -57,7 +57,7 @@ describe("regradeItems", () => {
   const seed = "attempt-seed";
   const versionId = "v-old";
   const oldInstance = type.generate(oldDef, createRng(questionSeed(seed, versionId))).instance;
-  const base = { attemptId: "a1", attemptSeed: seed, oldVersionId: versionId, type: "mcq", points: 1 };
+  const base = { attemptId: "a1", attemptSeed: seed, seedVersionId: versionId, type: "mcq", points: 1 };
 
   it("shows who gains and loses when the key changes, keeping each student's own option order", () => {
     // The author realises "a" (Nucleus) was the intended answer instead.
@@ -82,6 +82,15 @@ describe("regradeItems", () => {
     expect(d.lines.length).toBeGreaterThan(0);
   });
 
+  it("keeps the student's instance across repeated regrades (seeded from the original version)", () => {
+    // Regrade 1: key moves to "a". Regrade 2: key moves to "c". Both use the original seed version.
+    const keyed = (id: string) => ({ ...oldDef, options: oldDef.options.map((o: { id: string }) => ({ ...o, correct: o.id === id })) });
+    const [first] = regradeItems([{ ...base, itemId: "i", newDef: keyed("a"), response: { selected: ["c"] }, oldScore: 0 }]);
+    const [second] = regradeItems([{ ...base, itemId: "i", newDef: keyed("c"), response: { selected: ["c"] }, oldScore: first.newScore }]);
+    expect((second.instance as typeof oldInstance).options).toEqual(oldInstance.options);
+    expect(second.newScore).toBe(1);
+  });
+
   it("treats a malformed saved answer as unanswered", () => {
     expect(regradeItems([{ ...base, itemId: "i", newDef: oldDef, response: { junk: 1 }, oldScore: 0 }])[0].newScore).toBe(0);
   });
@@ -96,7 +105,8 @@ describe("canonical", () => {
   });
   it("treats a re-keyed copy as identical", () => {
     const r = compareReproduction({
-      stored: [{ position: 0, questionVersionId: "v", instance: { z: 1, a: [{ q: 1, b: 2 }] } }],
+      attemptSeed: "s",
+      stored: [{ position: 0, seedVersionId: "v", questionVersionId: "v", instance: { z: 1, a: [{ q: 1, b: 2 }] } }],
       rebuilt: [{ position: 0, versionId: "v", instance: { a: [{ b: 2, q: 1 }], z: 1 } }],
     });
     expect(r.identical).toBe(true);
@@ -104,18 +114,48 @@ describe("canonical", () => {
 });
 
 describe("compareReproduction", () => {
-  const stored = [{ position: 0, questionVersionId: "v1", instance: { a: 1 } }, { position: 1, questionVersionId: "v2", instance: { b: 2 } }];
+  const stored = [{ position: 0, seedVersionId: "v1", questionVersionId: "v1", instance: { a: 1 } }, { position: 1, seedVersionId: "v2", questionVersionId: "v2", instance: { b: 2 } }];
   it("confirms an identical rebuild", () => {
-    const r = compareReproduction({ stored, rebuilt: [{ position: 0, versionId: "v1", instance: { a: 1 } }, { position: 1, versionId: "v2", instance: { b: 2 } }] });
-    expect(r).toEqual({ identical: true, differences: [] });
+    const r = compareReproduction({ attemptSeed: "s", stored, rebuilt: [{ position: 0, versionId: "v1", instance: { a: 1 } }, { position: 1, versionId: "v2", instance: { b: 2 } }] });
+    expect(r).toEqual({ identical: true, differences: [], notes: [] });
   });
   it("names exactly what differs", () => {
-    const r = compareReproduction({ stored, rebuilt: [{ position: 0, versionId: "vX", instance: { a: 1 } }, { position: 1, versionId: "v2", instance: { b: 9 } }] });
+    const r = compareReproduction({ attemptSeed: "s", stored, rebuilt: [{ position: 0, versionId: "vX", instance: { a: 1 } }, { position: 1, versionId: "v2", instance: { b: 9 } }] });
     expect(r.identical).toBe(false);
     expect(r.differences[0]).toMatch(/Position 1: a different question/);
     expect(r.differences[1]).toMatch(/Position 2: same question, but the generated content differs/);
   });
   it("notices a length mismatch", () => {
-    expect(compareReproduction({ stored, rebuilt: [] }).differences[0]).toMatch(/has 2 questions but rebuilding gives 0/);
+    expect(compareReproduction({ attemptSeed: "s", stored, rebuilt: [] }).differences[0]).toMatch(/has 2 questions but rebuilding gives 0/);
+  });
+
+  describe("after a regrade", () => {
+    const type = getQuestionType("mcq");
+    const oldDef = type.defSchema.parse(fixturesByType["mcq"][0]);
+    const newDef = { ...oldDef, options: oldDef.options.map((o: { id: string }) => ({ ...o, correct: o.id === "a" })) };
+    const seed = "attempt-seed";
+    const original = type.generate(oldDef, createRng(questionSeed(seed, "v1"))).instance;
+    const [regraded] = regradeItems([{ itemId: "i", attemptId: "a", attemptSeed: seed, seedVersionId: "v1", type: "mcq", newDef, response: null, points: 1, oldScore: 0 }]);
+    const rebuilt = [{ position: 0, versionId: "v1", instance: original }];
+
+    it("matches when the stored instance is the new version generated from the original seed", () => {
+      const r = compareReproduction({
+        attemptSeed: seed,
+        stored: [{ position: 0, seedVersionId: "v1", questionVersionId: "v2", version: 2, type: "mcq", def: newDef, instance: regraded.instance }],
+        rebuilt,
+      });
+      expect(r.identical).toBe(true);
+      expect(r.notes[0]).toMatch(/Position 1: regraded to version 2; drawn and seeded identically/);
+    });
+
+    it("flags a regraded instance that no longer matches its seed", () => {
+      const r = compareReproduction({
+        attemptSeed: seed,
+        stored: [{ position: 0, seedVersionId: "v1", questionVersionId: "v2", version: 2, type: "mcq", def: newDef, instance: { tampered: true } }],
+        rebuilt,
+      });
+      expect(r.identical).toBe(false);
+      expect(r.differences[0]).toMatch(/Position 1: regraded to version 2, but the stored content doesn't match/);
+    });
   });
 });

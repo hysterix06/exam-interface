@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import { attemptItems, attempts, courses, exams, grades, profiles, questionVersions, responses } from "@/db/schema";
 import { gradeRubric, type LongAnswerInstance } from "@/question-types/long-answer/core";
@@ -9,6 +9,9 @@ import { writeAudit } from "@/server/authoring/audit";
 import type { ActionResult } from "@/server/authoring/questions";
 import { questionLabel } from "@/lib/question-label";
 import { canTeach, inScope, type Scope, scopeFor } from "@/server/access";
+import { recomputeAttempt } from "@/server/run/totals";
+import { overrideLines } from "@/engine/override";
+import type { GradeLine } from "@/engine/types";
 
 /** Exams with answers waiting for a human, real attempts only. */
 export async function listReviewExams(scope: Scope) {
@@ -145,19 +148,7 @@ export async function saveReview(
       .set({ score: result.score, lines: result.lines, gradedBy: "user", graderId: user.id, needsReview: false })
       .where(eq(grades.id, row.gradeId));
 
-    const [{ left }] = await tx
-      .select({ left: sql<number>`count(*) filter (where ${grades.needsReview})::int` })
-      .from(grades)
-      .innerJoin(attemptItems, eq(attemptItems.id, grades.attemptItemId))
-      .where(eq(attemptItems.attemptId, row.attemptId));
-    if (left === 0) {
-      const [{ total }] = await tx
-        .select({ total: sql<number>`coalesce(sum(${grades.score}), 0)::float` })
-        .from(grades)
-        .innerJoin(attemptItems, eq(attemptItems.id, grades.attemptItemId))
-        .where(eq(attemptItems.attemptId, row.attemptId));
-      await tx.update(attempts).set({ score: Math.round(total * 10_000) / 10_000, state: "graded" }).where(eq(attempts.id, row.attemptId));
-    }
+    await recomputeAttempt(tx, row.attemptId);
 
     await writeAudit(
       { orgId: user.orgId, actorId: user.id, action: "grade.review", entityType: "attempt_item", entityId: input.attemptItemId, before: { score: row.before }, after: { score: result.score, ticked: input.ticked } },
@@ -167,3 +158,65 @@ export async function saveReview(
   });
 }
 
+
+/**
+ * A person sets one answer's score directly, with a reason. Works for any
+ * question type and for answers already marked. The grader's lines are kept and
+ * one adjustment line is added, so the explanation still adds up to the score.
+ */
+export async function overrideGrade(
+  user: CurrentUser,
+  input: { attemptItemId: string; score: number; reason: string },
+): Promise<ActionResult> {
+  const reason = input.reason.trim();
+  if (!reason) return { ok: false, error: "Give a reason. It goes in the audit log and on the student's breakdown." };
+  if (!Number.isFinite(input.score)) return { ok: false, error: "Enter a number." };
+  const scope = await scopeFor(user);
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({
+        gradeId: grades.id,
+        score: grades.score,
+        max: grades.max,
+        lines: grades.lines,
+        needsReview: grades.needsReview,
+        overrideReason: grades.overrideReason,
+        attemptId: attemptItems.attemptId,
+        attemptState: attempts.state,
+        orgId: attempts.orgId,
+        courseId: exams.courseId,
+      })
+      .from(grades)
+      .innerJoin(attemptItems, eq(attemptItems.id, grades.attemptItemId))
+      .innerJoin(attempts, eq(attempts.id, attemptItems.attemptId))
+      .innerJoin(exams, eq(exams.id, attempts.examId))
+      .where(eq(grades.attemptItemId, input.attemptItemId))
+      .for("update")
+      .limit(1);
+    if (!row || row.orgId !== user.orgId || !canTeach(scope, row.courseId)) return { ok: false as const, error: "That answer no longer exists." };
+    if (row.attemptState === "in_progress") return { ok: false as const, error: "The student is still working on this exam." };
+    if (input.score < 0 || input.score > row.max) return { ok: false as const, error: `The score must be between 0 and ${row.max}.` };
+
+    const score = Math.round(input.score * 10_000) / 10_000;
+    const lines = overrideLines((row.lines ?? []) as GradeLine[], { score, max: row.max, by: user.fullName ?? user.email, reason });
+    await tx
+      .update(grades)
+      .set({ score, lines, gradedBy: "user", graderId: user.id, needsReview: false, overrideReason: reason })
+      .where(eq(grades.id, row.gradeId));
+    await recomputeAttempt(tx, row.attemptId);
+    await writeAudit(
+      {
+        orgId: user.orgId,
+        actorId: user.id,
+        action: "grade.override",
+        entityType: "attempt_item",
+        entityId: input.attemptItemId,
+        before: { score: row.score, needsReview: row.needsReview, overrideReason: row.overrideReason },
+        after: { score, attemptId: row.attemptId },
+        reason,
+      },
+      tx,
+    );
+    return { ok: true as const };
+  });
+}

@@ -254,6 +254,12 @@ export const attemptItems = pgTable(
     questionVersionId: uuid("question_version_id")
       .notNull()
       .references(() => questionVersions.id),
+    // The version this item was drawn and seeded from. Never changes: a regrade
+    // moves questionVersionId to the new version but the student's variables and
+    // option order still come from hash(attempt.seed + ":" + seedVersionId).
+    seedVersionId: uuid("seed_version_id")
+      .notNull()
+      .references(() => questionVersions.id),
     position: integer("position").notNull(),
     instance: jsonb("instance").notNull(),
     flagged: boolean("flagged").notNull().default(false),

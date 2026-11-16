@@ -10,6 +10,7 @@ import type { CurrentUser } from "@/server/auth";
 import { getExam } from "@/server/authoring/data";
 import { writeAudit } from "@/server/authoring/audit";
 import type { ActionResult } from "@/server/authoring/questions";
+import { recomputeAttempt } from "@/server/run/totals";
 
 /** Machine-graded questions that real students answered in this exam, with their versions. */
 export async function listRegradable(scope: Scope, examId: string) {
@@ -63,7 +64,9 @@ async function gather(reader: Reader, scope: Scope, examId: string, questionId: 
       itemId: attemptItems.id,
       attemptId: attempts.id,
       attemptSeed: attempts.seed,
-      oldVersionId: attemptItems.questionVersionId,
+      seedVersionId: attemptItems.seedVersionId,
+      currentVersionId: attemptItems.questionVersionId,
+      overrideReason: grades.overrideReason,
       response: responses.response,
       max: grades.max,
       oldScore: grades.score,
@@ -84,12 +87,14 @@ async function gather(reader: Reader, scope: Scope, examId: string, questionId: 
       ),
     );
 
+  // A score a person changed by hand stays as they set it; the preview says so.
+  const kept = rows.filter((r) => r.overrideReason !== null).map((r) => ({ attemptId: r.attemptId, score: r.oldScore ?? 0 }));
   const diffs = regradeItems(
-    rows.map((r) => ({
+    rows.filter((r) => r.overrideReason === null).map((r) => ({
       itemId: r.itemId,
       attemptId: r.attemptId,
       attemptSeed: r.attemptSeed,
-      oldVersionId: r.oldVersionId,
+      seedVersionId: r.seedVersionId,
       type: target.question_versions.type,
       newDef: target.question_versions.def,
       response: r.response ?? null,
@@ -97,11 +102,19 @@ async function gather(reader: Reader, scope: Scope, examId: string, questionId: 
       oldScore: r.oldScore ?? 0,
     })),
   );
-  return { manual: false as const, targetVersionId: target.question_versions.id, diffs };
+  const previous = Object.fromEntries(rows.map((r) => [r.itemId, r.currentVersionId]));
+  return { manual: false as const, targetVersionId: target.question_versions.id, diffs, kept, previous };
 }
 
 export type RegradePreview =
-  | { ok: true; changed: number; total: number; diffs: { attemptId: string; oldScore: number; newScore: number; delta: number }[] }
+  | {
+      ok: true;
+      changed: number;
+      total: number;
+      diffs: { attemptId: string; oldScore: number; newScore: number; delta: number }[];
+      /** Answers whose score was changed by hand: left alone. */
+      kept: { attemptId: string; score: number }[];
+    }
   | { ok: false; error: string };
 
 export async function previewRegrade(scope: Scope, examId: string, questionId: string, targetVersion: number): Promise<RegradePreview> {
@@ -109,7 +122,7 @@ export async function previewRegrade(scope: Scope, examId: string, questionId: s
   if (!g) return { ok: false, error: "That version doesn't exist." };
   if (g.manual) return { ok: false, error: "Written answers are marked by hand and can't be regraded automatically." };
   const diffs = g.diffs.map(({ attemptId, oldScore, newScore, delta }) => ({ attemptId, oldScore, newScore, delta }));
-  return { ok: true, changed: diffs.filter((d) => d.delta !== 0).length, total: diffs.length, diffs };
+  return { ok: true, changed: diffs.filter((d) => d.delta !== 0).length, total: diffs.length, diffs, kept: g.kept };
 }
 
 /** Write the regrade: new instance, version and grade per item, recomputed attempt totals. */
@@ -137,23 +150,7 @@ export async function applyRegrade(
     }
     // Totals, max and state are recomputed from the stored grades: a regrade can
     // change a question's points, or send an answer back for review.
-    for (const attemptId of new Set(g.diffs.map((d) => d.attemptId))) {
-      const all = await tx
-        .select({ score: grades.score, max: grades.max, needsReview: grades.needsReview })
-        .from(grades)
-        .innerJoin(attemptItems, eq(attemptItems.id, grades.attemptItemId))
-        .where(eq(attemptItems.attemptId, attemptId));
-      const total = all.reduce((s, r) => s + r.score, 0);
-      const max = all.reduce((s, r) => s + r.max, 0);
-      await tx
-        .update(attempts)
-        .set({
-          score: Math.round(total * 10_000) / 10_000,
-          maxScore: Math.round(max * 10_000) / 10_000,
-          state: all.some((r) => r.needsReview) ? "submitted" : "graded",
-        })
-        .where(eq(attempts.id, attemptId));
-    }
+    for (const attemptId of new Set(g.diffs.map((d) => d.attemptId))) await recomputeAttempt(tx, attemptId);
     await writeAudit(
       {
         orgId: user.orgId,
@@ -161,8 +158,17 @@ export async function applyRegrade(
         action: "exam.regrade",
         entityType: "exam",
         entityId: input.examId,
-        before: Object.fromEntries(changed.map((d) => [d.attemptId, d.oldScore])),
-        after: { questionId: input.questionId, version: input.targetVersion, scores: Object.fromEntries(changed.map((d) => [d.attemptId, d.newScore])) },
+        before: {
+          scores: Object.fromEntries(changed.map((d) => [d.attemptId, d.oldScore])),
+          versions: Object.fromEntries(g.diffs.map((d) => [d.attemptId, g.previous[d.itemId]])),
+        },
+        after: {
+          questionId: input.questionId,
+          version: input.targetVersion,
+          versionId: g.targetVersionId,
+          scores: Object.fromEntries(changed.map((d) => [d.attemptId, d.newScore])),
+          keptOverrides: g.kept.map((k) => k.attemptId),
+        },
         reason: input.reason.trim(),
       },
       tx,
