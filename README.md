@@ -197,6 +197,12 @@ Spreadsheet widget, iframe widget protocol plus a demo simulator, item analysis,
 **Phase 7: Polish**
 Accessibility pass (keyboard, screen reader, contrast), mobile layout, empty/error states, dark mode, demo seed data.
 
+**Status (Nov 2026):** Phases 0–7 are built. Deliberately left for later:
+- Question types from §3 not yet built: categorization, hotspot, label-the-diagram, composite/passage, code, and drag-in chips for cloze.
+- The live board polls every 5 s (paused in hidden tabs) rather than using Realtime.
+- Adaptive mode is a rules preview only; live attempts use the fixed draw.
+- Distractor analysis covers choice types only.
+
 ## 10. Kickoff Notes for Claude Code
 
 - Put sections 1, 3, and 7 into `CLAUDE.md` so every session shares the architecture.
