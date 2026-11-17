@@ -20,7 +20,7 @@ export interface ChoiceGradeInput {
   penalty?: number;
 }
 
-export const SCORING_DESCRIPTIONS: Record<MultiScoring, string> = {
+const SCORING_DESCRIPTIONS: Record<MultiScoring, string> = {
   "all-or-nothing": "Full points only if the selection matches the key exactly.",
   "right-minus-wrong":
     "Each correct option is worth an equal share; each wrong selection subtracts one share; the total never goes below 0.",

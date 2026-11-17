@@ -17,7 +17,7 @@ import { cn } from "cn"
 const remarkPlugins = [remarkGfm, remarkBreaks, [remarkMath, { singleDollarTextMath: false }]] as const
 const rehypePlugins = [[rehypeKatex, { throwOnError: false, strict: "ignore", trust: false }]] as const
 
-export const ASSET_PREFIX = "asset:"
+const ASSET_PREFIX = "asset:"
 
 /** asset:<id> -> the access-checked asset route; other images are dropped; links keep the safe default. */
 function urlTransform(url: string, key: string) {

@@ -28,7 +28,7 @@ const FORBIDDEN_IN_VALUE = /\[\[|\]\]|\{\{|\}\}/;
 /** Wording rows/options checked through the type's own pre-flight, at most. */
 const MAX_VALIDATED = 50;
 
-export const textVarsSchema = z.object({
+const textVarsSchema = z.object({
   table: z.array(z.record(z.string(), z.string())).max(200).default([]),
   lists: z.array(z.object({ name: z.string(), options: z.array(z.string()).max(200) })).max(20).default([]),
 });
@@ -52,13 +52,13 @@ export function joinDef(def: unknown, textVars: TextVars | null): unknown {
 }
 
 /** Every variable name a wording block defines: table columns, then lists. */
-export function textVarNames(tv: TextVars): string[] {
+function textVarNames(tv: TextVars): string[] {
   const cols = [...new Set(tv.table.flatMap((row) => Object.keys(row)))];
   return [...cols, ...tv.lists.map((l) => l.name)];
 }
 
 /** One student's wording values. */
-export function drawTextVars(tv: TextVars, rng: Rng): Record<string, string> {
+function drawTextVars(tv: TextVars, rng: Rng): Record<string, string> {
   const r = rng.fork("text-vars");
   const values: Record<string, string> = {};
   if (tv.table.length) Object.assign(values, r.fork("table").pick(tv.table));

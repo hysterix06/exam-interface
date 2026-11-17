@@ -11,7 +11,7 @@ import type { ActionResult } from "@/server/authoring/questions";
 // No 0/O/1/I so codes survive being read aloud or copied from a screen.
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-export function normalizeCode(code: string) {
+function normalizeCode(code: string) {
   return code.replace(/[\s-]/g, "").toUpperCase();
 }
 

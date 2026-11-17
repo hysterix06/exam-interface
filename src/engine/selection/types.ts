@@ -19,7 +19,7 @@ const topicLimitSchema = z.object({
   max: z.number().int().min(0).optional(),
 });
 
-export const blueprintSectionSchema = z
+const blueprintSectionSchema = z
   .object({
     topicId: z.string(),
     /** More topics drawn in the same lottery as `topicId` ("5 from Genetics or Ecology"). */

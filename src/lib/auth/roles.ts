@@ -13,7 +13,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 // /widgets holds static, public widget pages (embedded in sandboxed iframes by
 // the exam). They must never contain anything secret.
-export const PUBLIC_PATHS = ["/login", "/widgets"] as const;
+const PUBLIC_PATHS = ["/login", "/widgets"] as const;
 
 function matchesPrefix(pathname: string, prefix: string) {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);

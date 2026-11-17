@@ -9,7 +9,7 @@ import type { PreflightIssue } from "@/engine/types";
 // 0–1 coordinates (never pixels), simplified so a save stays small.
 
 export const MAX_STROKES = 500;
-export const MAX_POINTS = 20_000;
+const MAX_POINTS = 20_000;
 
 const criterionSchema = z.object({ id: z.string().min(1), text: z.string(), points: z.number() });
 const defSchema = z.object({

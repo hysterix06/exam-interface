@@ -10,8 +10,8 @@ import type { CurrentUser } from "@/server/auth";
 import { writeAudit } from "@/server/authoring/audit";
 import type { ActionResult } from "@/server/authoring/questions";
 
-export const ASSET_BUCKET = "assets";
-export const MAX_ASSET_BYTES = 5 * 1024 * 1024;
+const ASSET_BUCKET = "assets";
+const MAX_ASSET_BYTES = 5 * 1024 * 1024;
 /** Signed download links last this long; the route hands out a fresh one each time. */
 export const SIGNED_URL_SECONDS = 300;
 

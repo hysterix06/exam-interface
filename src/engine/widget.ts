@@ -10,7 +10,7 @@ import { z } from "zod";
 // "state" is whatever the widget wants saved; the exam stores it as the answer
 // and hands it back on init (resume, review, answer key).
 
-export const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = 1;
 /** Largest saved state we accept from a widget, so a misbehaving one can't fill the database. */
 export const MAX_STATE_BYTES = 100_000;
 

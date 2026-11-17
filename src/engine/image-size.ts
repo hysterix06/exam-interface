@@ -3,9 +3,9 @@
 // from its header. Pure, dependency-free, total: unknown or broken input
 // returns null. SVG is never accepted: it can carry script.
 
-export const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 /** Larger images are refused; diagrams never need more. */
-export const MAX_DIMENSION = 10_000;
+const MAX_DIMENSION = 10_000;
 
 export type Sniffed =
   | { kind: "image"; mime: "image/png" | "image/jpeg" | "image/webp"; width: number; height: number }

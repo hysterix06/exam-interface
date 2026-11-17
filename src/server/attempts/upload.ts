@@ -11,7 +11,7 @@ import type { CurrentUser } from "@/server/auth";
 import { editable, sequentialLock, touch, writeResponse } from "./save";
 import { getOwnAttempt } from "./take";
 
-export const SUBMISSION_BUCKET = "submissions";
+const SUBMISSION_BUCKET = "submissions";
 
 export type UploadResult = { ok: true; response: FileTaskResponse } | { ok: false; error: string; closed?: true };
 

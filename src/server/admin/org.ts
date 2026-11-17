@@ -13,7 +13,7 @@ import { listAllCourses } from "./courses";
 import { roleCounts } from "./people";
 
 /** Defaults new exams start from. Instructors can change them per exam. */
-export const orgSettingsSchema = z.object({
+const orgSettingsSchema = z.object({
   defaults: examSettingsSchema.pick({ timeLimitMinutes: true, attemptsAllowed: true, release: true }).default({
     timeLimitMinutes: null,
     attemptsAllowed: 1,

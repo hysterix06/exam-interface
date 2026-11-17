@@ -33,7 +33,7 @@ export function parseNumberWithUnit(input: string): ParsedNumber | null {
 }
 
 /** Largest accepted distance from the expected value. */
-export function allowedError(expected: number, tol: Tolerance) {
+function allowedError(expected: number, tol: Tolerance) {
   return Math.max(tol.abs ?? 0, tol.rel ? Math.abs(expected) * tol.rel : 0);
 }
 

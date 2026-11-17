@@ -18,7 +18,7 @@ import { writeAudit } from "./audit";
 import { getExam, loadPool, topicNames } from "./data";
 import type { ActionResult } from "./questions";
 
-export const examInputSchema = z.object({
+const examInputSchema = z.object({
   id: z.guid(),
   title: z.string().trim().min(1, "Give the exam a title.").max(200),
   description: z.string().trim().max(2000).nullable(),
