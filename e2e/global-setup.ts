@@ -16,6 +16,10 @@ export default async function globalSetup() {
     await sql`update exams set state = 'open', opens_at = null, closes_at = null where id = ${exam.id}`;
     // The showcase exams allow a few attempts each; start every run fresh.
     await sql`delete from attempts where exam_id in (select id from exams where title in ('BIO 101 Field Skills Check (open)', 'BIO 101 Lab Skills Check (open)'))`;
+    // Assignments and events the e2e specs created on earlier runs.
+    await sql`delete from assignments where title like 'e2e %'`;
+    await sql`delete from course_events where title like 'e2e %'`;
+    await sql`delete from api_tokens where name like 'e2e %'`;
   } finally {
     await sql.end();
   }

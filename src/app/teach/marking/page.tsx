@@ -4,23 +4,41 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Row, RowList } from "@/components/ui/row-list";
 import { plural } from "@/lib/format";
 import { requireStaff } from "@/server/access";
+import { listAssignmentsToMark } from "@/server/assignments/authoring";
 import { listReviewExams } from "@/server/review";
+import { Section } from "@/components/ui/section";
 
 export const metadata: Metadata = { title: "Marking" };
 
 export default async function MarkingPage() {
   const { scope } = await requireStaff();
-  const exams = await listReviewExams(scope);
+  const [exams, handIns] = await Promise.all([listReviewExams(scope), listAssignmentsToMark(scope)]);
   const total = exams.reduce((s, e) => s + e.pending, 0);
+  const handInTotal = handIns.reduce((s, e) => s + e.pending, 0);
   return (
     <>
       <PageHeader
         title="Marking"
-        description={total ? `${plural(total, "written answer")} waiting. Students stay anonymous while you mark, one question at a time.` : undefined}
+        description={
+          total || handInTotal
+            ? [total ? `${plural(total, "written exam answer")} (students stay anonymous, one question at a time)` : null, handInTotal ? plural(handInTotal, "assignment hand-in") : null].filter(Boolean).join(" and ") + " waiting."
+            : undefined
+        }
       />
+      {handIns.length > 0 && (
+        <Section title="Assignments">
+          <RowList>
+            {handIns.map((a) => (
+              <Row key={a.id} href={`/teach/assignments/${a.id}/handins`} title={a.title} detail={a.courseTitle} aside={<span className="tabular-nums">{plural(a.pending, "hand-in")}</span>} />
+            ))}
+          </RowList>
+        </Section>
+      )}
       {exams.length === 0 ? (
+        handIns.length > 0 ? null :
         <EmptyState>Nothing to mark. You’re all caught up.</EmptyState>
       ) : (
+        <Section title={handIns.length ? "Exams" : undefined}>
         <RowList>
           {exams.map((e) => (
             <Row
@@ -32,6 +50,7 @@ export default async function MarkingPage() {
             />
           ))}
         </RowList>
+        </Section>
       )}
     </>
   );

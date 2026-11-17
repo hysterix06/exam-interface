@@ -10,6 +10,7 @@ import { Row, RowList } from "@/components/ui/row-list";
 import { Section } from "@/components/ui/section";
 import { plural } from "@/lib/format";
 import { requireStaff } from "@/server/access";
+import { listAssignmentsToMark, listAssignmentsToRelease } from "@/server/assignments/authoring";
 import { loadTeachHome } from "@/server/teach/home";
 
 export const metadata: Metadata = { title: "Home" };
@@ -35,7 +36,8 @@ export default async function TeachHome() {
     );
   }
 
-  const attention = home.live.length + home.toMark.length + home.toRelease.length + home.drafts.filter((d) => d.blocking > 0).length;
+  const [handIns, toReleaseWork] = await Promise.all([listAssignmentsToMark(scope), listAssignmentsToRelease(scope)]);
+  const attention = home.live.length + home.toMark.length + handIns.length + home.toRelease.length + toReleaseWork.length + home.drafts.filter((d) => d.blocking > 0).length;
 
   return (
     <>
@@ -95,6 +97,26 @@ export default async function TeachHome() {
                 detail={e.courseTitle}
                 aside={<span className="tabular-nums">{plural(e.toMark, "answer")}</span>}
               />
+            ))}
+          </RowList>
+        </Section>
+      )}
+
+      {handIns.length > 0 && (
+        <Section title="Hand-ins to mark">
+          <RowList>
+            {handIns.map((a) => (
+              <Row key={a.id} href={`/teach/assignments/${a.id}/handins`} title={a.title} detail={a.courseTitle} aside={<span className="tabular-nums">{plural(a.pending, "hand-in")}</span>} />
+            ))}
+          </RowList>
+        </Section>
+      )}
+
+      {toReleaseWork.length > 0 && (
+        <Section title="Assignment grades to release" description="Every hand-in is marked. Students see their grades and feedback once you release them.">
+          <RowList>
+            {toReleaseWork.map((a) => (
+              <Row key={a.id} href={`/teach/assignments/${a.id}/handins`} title={a.title} detail={`${a.courseTitle} · ${plural(a.handedIn, "hand-in")}`} aside={<span className="text-muted-foreground">Release →</span>} />
             ))}
           </RowList>
         </Section>

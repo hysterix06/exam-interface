@@ -3,6 +3,7 @@ import { ROLE_LABELS } from "@/lib/auth/roles";
 import { scopeFor } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
 import { listCourses } from "@/server/authoring/data";
+import { listAssignmentsToMark } from "@/server/assignments/authoring";
 import { listReviewExams } from "@/server/review";
 import { studentAcademics } from "@/server/student/academics";
 import { AccountMenu } from "./account-menu";
@@ -22,10 +23,11 @@ function SkipLink() {
 
 async function staffNav(user: CurrentUser): Promise<NavGroup[]> {
   const scope = await scopeFor(user);
-  const [review, courses] = await Promise.all([listReviewExams(scope), user.role === "instructor" ? listCourses(scope) : []]);
-  const toMark = review.reduce((s, r) => s + r.pending, 0);
+  const [review, handIns, courses] = await Promise.all([listReviewExams(scope), listAssignmentsToMark(scope), user.role === "instructor" ? listCourses(scope) : []]);
+  const toMark = review.reduce((s, r) => s + r.pending, 0) + handIns.reduce((s, r) => s + r.pending, 0);
   const teaching = [
     { href: "/teach/exams", label: "Exams" },
+    { href: "/teach/assignments", label: "Assignments" },
     { href: "/teach/questions", label: "Question bank" },
     { href: "/teach/marking", label: "Marking", count: toMark },
   ];

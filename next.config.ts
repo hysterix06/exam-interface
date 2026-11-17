@@ -7,8 +7,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
-      // Image uploads (5 MB, src/server/assets.ts) plus multipart overhead.
-      bodySizeLimit: "6mb",
+      // Assignment hand-ins (10 MB a file, src/engine/assignments/settings.ts) plus multipart overhead.
+      bodySizeLimit: "11mb",
     },
   },
   // Pages may only be framed by this app (widgets are embedded same-origin).

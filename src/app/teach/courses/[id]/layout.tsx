@@ -20,8 +20,10 @@ export default async function TeachCourseLayout({ children, params }: LayoutProp
         tabs={[
           { href: base, label: "Overview", exact: true },
           { href: `${base}/details`, label: "Homepage" },
+          { href: `${base}/assignments`, label: "Assignments" },
           { href: `${base}/calendar`, label: "Calendar" },
           { href: `${base}/grading`, label: "Grading" },
+          { href: `${base}/gradebook`, label: "Gradebook" },
           { href: `${base}/people`, label: "People" },
         ]}
       />
