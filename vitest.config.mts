@@ -8,5 +8,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // Types with async setup (the code sandbox) load once per test file.
+    setupFiles: ["./src/test-setup.ts"],
   },
 });

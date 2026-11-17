@@ -4,8 +4,9 @@ import {
   describeTolerance,
   parseNumberWithUnit,
   withinTolerance,
+  wrongNumber,
 } from "@/engine/grading/numeric";
-import { compileRegex, matchAccepted, matchRegex, normalizeText } from "@/engine/grading/text";
+import { compileRegex, matchAccepted, matchRegex, normalizeText, WRONG_TEXT } from "@/engine/grading/text";
 import { defineQuestionType } from "@/engine/question-type";
 import type { GradeLine, PreflightIssue } from "@/engine/types";
 
@@ -170,6 +171,14 @@ export const shortAnswer = defineQuestionType<ShortAnswerDef, ShortAnswerInstanc
     }
     return { text: `guess ${rng.int(1, 999)}` };
   },
+
+  wrongResponse(inst) {
+    const m = inst.match;
+    if (m.kind !== "numeric") return { text: WRONG_TEXT };
+    return { text: `${fmtNum(wrongNumber(m.value, m.tolerance))}${m.units?.length ? ` ${m.units[0]}` : ""}` };
+  },
+
+  estimateSeconds: (def) => (def.match.kind === "numeric" ? 90 : 60),
 
   validateDef(def) {
     const issues: PreflightIssue[] = [];

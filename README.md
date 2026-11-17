@@ -1,219 +1,325 @@
-# Exam App: Stack and Plan
+# Exam
 
-Working name: Exam. A showcase of how intelligent a testing app can be. The UI is the product; integrity tooling is a deliberate non-goal (kept in mind, not built).
+An exam app built to show how much a testing tool can do when every decision is deterministic and explainable. Educators build question banks and exams, check them before anyone sits them, run them live and read the results. Students sit exams on a nearly empty screen. Every score, every drawn question and every number on a dashboard can be traced back to a rule and its inputs.
 
-**Version 1 uses no AI.** Every behavior (selection, randomization, grading) is deterministic, rule-based, and explainable. An educator must be able to understand it, verify it, and reproduce it by hand. Intelligence here means good design and good math, not a model.
+There is **no AI** anywhere in it. Selection, randomisation, grading, adaptive paths and analytics are plain rules and statistics that an educator can follow and check by hand.
 
-## 1. Principles
+- **19 question types**, from multiple choice to sandboxed code, uploaded Excel workbooks, image hotspots and passages with sub-questions
+- **Per-student exams** drawn from a blueprint and generated from a seed, so any student's exam can be rebuilt exactly
+- **Verification before publishing**: a pre-flight checklist; perfect, blank and all-wrong student runs; a 200-student simulation; a variant explorer
+- **Transparency after the exam**: line-by-line grade explanations, Reproduce from seed, a regrade preview, item analysis, an audit log and exports
 
-1. **Question types are plugins.** Every type implements the same interface, so adding a new one never touches the core. This is the single most important architectural decision.
-2. **Questions are templates, not fixed text.** A "question" is a recipe that produces a concrete *instance* for a given student seed.
-3. **Everything random is reproducible.** One seed per attempt (and per question) means any student's exact exam can be regenerated for grading, regrading, and disputes.
-4. **Server is the source of truth.** Timer, state, answers, and grading live server-side. The client is a view.
-5. **Grading is pure functions.** `grade(instance, response) -> score + feedback`. Easy to test, easy to regrade.
-6. **Design:** minimal, high-contrast, typographically restrained. Exam-taking screen should be nearly empty chrome: question, answer, progress, timer.
-7. **No black boxes.** If the app makes a decision (which questions a student got, why an answer scored 2/3), the educator can see the rule and the inputs that produced it, in plain language.
-8. **Show, don't ask them to trust.** Every authoring screen has a live preview, a "simulate" button, and a visible answer key. Nothing is published without a pre-flight check.
-9. **No AI in v1.** Deterministic logic only. Architecture should not block adding optional AI assistance later, but nothing may depend on it.
+## Contents
 
-## 2. Recommended Stack
+1. [Principles](#principles)
+2. [The three apps](#the-three-apps)
+3. [Question types](#question-types)
+4. [The engine](#the-engine)
+5. [Checking an exam](#checking-an-exam)
+6. [Running an exam](#running-an-exam)
+7. [After the exam](#after-the-exam)
+8. [Embedded widgets](#embedded-widgets)
+9. [Architecture](#architecture)
+10. [Data model](#data-model)
+11. [Getting started](#getting-started)
+12. [Testing](#testing)
+13. [Known limits and licences](#known-limits-and-licences)
 
-| Layer | Choice | Why |
-|---|---|---|
-| Framework | **Next.js (App Router) + TypeScript** | You already use it; one language end to end; server actions for the grading and attempt logic |
-| UI | **Tailwind CSS + shadcn/ui (Radix primitives)** | Accessible components you own and restyle; fits the minimal look |
-| Motion | **Framer Motion** (sparingly) | Question transitions, drag-and-drop feel |
-| Database | **PostgreSQL** (Neon or Supabase) | Relational data (exams, pools, attempts) plus JSONB for flexible question payloads |
-| ORM | **Drizzle** | Typed schema, SQL-like, light |
-| Validation | **Zod** | One schema per question type, shared by editor, renderer, and grader |
-| Auth | **Auth.js** (or Supabase Auth) + custom **exam access code** layer | Accounts for admins and students; codes gate entry to a specific exam |
-| Realtime | **Server-Sent Events (SSE) or Supabase Realtime** | Push "exam is now open" to the home screen, live proctor dashboard |
-| Rich text | **TipTap** | Question and answer editing, inline blanks as custom nodes |
-| Math | **KaTeX** for rendering, **mathjs** for evaluating expressions | Formulas in questions, parameterized numbers, tolerance-based grading |
-| Drag and drop | **dnd-kit** | Ordering and matching questions |
-| Spreadsheet widget | **Univer** (or Fortune-sheet) + **HyperFormula** | In-browser Excel-like task, gradable by cell value and formula |
-| Code widget | **Monaco** editor (+ optional sandboxed runner later) | Coding questions |
-| State | **TanStack Query** + **Zustand** | Server cache plus local attempt state with autosave |
-| Testing | **Vitest** (graders, generators), **Playwright** (exam flow end to end) | Graders and randomizers deserve heavy unit tests |
-| Hosting | **Vercel** + Neon/Supabase | Zero-ops for a showcase |
+## Principles
 
-Alternative if you want a hard split: Vite + React frontend, Hono/Fastify backend. I would not; Next.js removes a whole layer of glue for this project.
+1. **Question types are plugins.** Every type implements the same interface. Adding one never touches the core.
+2. **Questions are templates.** A question is a recipe that generates a concrete *instance* from a seed.
+3. **Everything random is reproducible.** There is one seed per attempt, derived per question. Any student's exam can be regenerated exactly.
+4. **The server is the source of truth.** Timer, state, answers and grading live on the server. The client is a view.
+5. **Grading is a pure function.** `grade(instance, response) → result`, with lines that add up to the score.
+6. **Minimal, high-contrast design.** The exam screen is nearly empty chrome: question, answer, progress, timer.
+7. **No black boxes.** Every decision (which questions, why a score) is explainable to an educator in plain language.
+8. **Show, don't ask for trust.** Live preview, simulation, a visible answer key and pre-flight before publishing.
+9. **No AI.** Deterministic logic only.
 
-## 3. Question Type System
+## The three apps
 
-```ts
-interface QuestionType<TDef, TInstance, TResponse> {
-  id: string;                       // "mcq", "ordering", "cloze", ...
-  defSchema: ZodType<TDef>;         // what an author stores (the template)
-  generate(def: TDef, rng: Rng): TInstance;   // template + seed -> concrete question
-  Editor: React.FC;                 // author UI
-  Renderer: React.FC;               // student UI
-  grade(inst: TInstance, resp: TResponse): { score: number; max: number; feedback?: string; needsReview?: boolean };
-}
-```
+One codebase, three homes. A person's role (stored in `profiles.role`) decides which one they land in. Every page and action re-checks the role from the database.
 
-### Types to ship
-- **Choice:** multiple choice (single and multi-select), true/false, dropdown
-- **Text:** short answer (exact, regex, accepted-list, numeric with tolerance and units), long answer (manual or rubric/LLM-assisted)
-- **Structured:** ordering, matching (drag lines or drag items), categorization (bucket sort), hotspot (click region on an image), label-the-diagram
-- **Cloze / "adlib":** sentence with embedded blanks, each blank can be text, number, dropdown, or drag-in chip. Authoring syntax like `The capital of France is {{text:Paris|paris}} and 2+2 is {{num:4±0}}`
-- **Numeric / formula:** parameterized (see section 4), graded against a computed answer
-- **Table fill:** a grid where the student fills cells; graded per cell
-- **Spreadsheet task:** embedded sheet with starting data, graded by cell values and/or formulas
-- **Code:** editor plus test cases (later)
-- **Composite / passage-based:** one stimulus (reading, data set, image) with several sub-questions
+| Who | Where | What they get |
+| --- | --- | --- |
+| **Students** | `/` | What to sit now, what's coming up, and results. Exam info pages list the rules before it opens. `/attempt/[id]` is the exam screen, with no navigation chrome. |
+| **Instructors** | `/teach` | An attention queue: what's live, what needs marking, what's ready to release, drafts that fail checks. One exam is one workspace with four tabs: **Build** (autosaves) · **Verify** · **Run** · **Results**. Also: courses, question bank, marking. |
+| **Admins** | `/admin` | People (add, CSV import, role, switch off), courses (teachers, enrolment, archive), activity (the audit log) and organisation defaults for new exams. Admins can use every `/teach` page for any course. |
 
-## 4. The "Intelligent" Part
+Staff only see the courses they teach. Anything outside their scope is a 404, not a 403.
 
-### 4.1 Pools and blueprints
-- Questions belong to **topics**; an exam has a **blueprint**: "5 from Topic A, 3 from Topic B, 2 from Topic C."
-- Each question has **weight** (selection likelihood), **difficulty**, **points**, and optional **tags** (Bloom level, learning objective).
-- Selection = weighted sampling **without replacement**, with constraints (min/max per topic, difficulty mix, no near-duplicate questions via a `conflictsWith` or `group` field).
-- Blueprint can also hold **variant groups**: several different questions that test the same concept, only one drawn.
+## Question types
 
-### 4.2 Parameterized questions
-- Variables with generators: `a = int(2,9)`, `price = round(uniform(10,50),2)`, `name = pick(names)`.
-- Constraints: `b != a`, `a*b < 100`, "answer must be an integer." The generator retries until constraints hold.
-- Computed answer: `answer = a*price*(1+tax)` evaluated with mathjs; grader accepts within tolerance and optionally checks units/sig figs.
-- Text variants: swap names, contexts, wording.
-- Seeded PRNG (pseudorandom number generator, e.g. `seedrandom` or a small PCG implementation): `seed = hash(attemptId, questionId)`.
+Each type lives in `src/question-types/<id>/`: `core.ts` (pure logic: schemas, generate, grade, key, pre-flight, redact) and `ui.tsx` (editor and renderer). Its fixtures run through a contract suite over 1,000 seeds.
 
-### 4.3 Grading
-- Auto: exact, set-based, partial credit (per blank, per correct pair, Kendall-tau-style for ordering), numeric tolerance, spreadsheet cell/formula checks.
-- Negative marking and "select all" penalty rules configurable per question.
-- Manual review queue for long answers: rubric as a checklist of criteria with point values, one-click scoring, keyboard shortcuts, anonymous mode (student names hidden), grade one question across all students at a time.
-- Optional rule-based aids for long answers (never auto-final): required-keyword highlighting in the answer text, word count, so the grader works faster. The human always assigns the score.
-- Regrade tool: change an answer key, re-run all attempts, see score diffs before applying.
+| Type | What the student does | How it's graded |
+| --- | --- | --- |
+| `mcq` | Picks one or several options | Single: right/wrong with optional negative marking. Multi: all-or-nothing, right-minus-wrong, or per option |
+| `true-false` | True or false | Right/wrong, optional penalty |
+| `dropdown` | Picks from a dropdown | Right/wrong |
+| `short-answer` | Types a word, phrase or number | Accepted list (case and spacing options), regex, or a number with tolerance and units |
+| `numeric` | Solves a generated calculation | Variables drawn per student; answer from a formula (mathjs); tolerance, units and optional significant figures (a separate line with its own share) |
+| `cloze` | Fills blanks in a sentence: typed text, numbers, dropdowns or drag-in chips | An equal share per blank. Syntax: `{{text:Paris\|paris}}`, `{{num:4±0.1}}`, `{{select:a\|b*}}`, `{{chip:Paris}}` |
+| `table-fill` | Fills cells in a table | An equal share per blank cell (same blank syntax) |
+| `ordering` | Drags items into order | Share of item pairs in the right order (Kendall tau) |
+| `matching` | Drags answers onto items | An equal share per pair; extra wrong answers allowed |
+| `categorization` | Sorts items into buckets | An equal share per item; optional penalty |
+| `hotspot` | Clicks a place on an image | Rectangle, circle or polygon regions; one or several clicks; optional penalty. Arrow keys work too |
+| `label-diagram` | Drags labels onto numbered pins on an image | An equal share per pin; unused labels are distractors |
+| `spreadsheet` | Works in an in-browser spreadsheet | Checks on cells: value (with tolerance), "must be a formula", "must use SUM" |
+| `file-task` | Downloads a starter `.xlsx`, works in Excel, uploads it | The same cell checks, on the uploaded workbook |
+| `widget` | Works in an embedded tool (a till, a hotel front desk) | Checks on paths in the state the widget reports |
+| `code` | Writes a JavaScript function | Test cases run in a sandbox; hidden tests stop hard-coding the visible ones |
+| `long-answer` | Writes an answer | **By hand**, against a rubric. Keywords are highlighted and words counted to help the marker |
+| `whiteboard` | Draws (sketch, graph, annotation) | **By hand**, against a rubric |
+| `composite` | Reads a passage, table or figure, then answers parts of any other type | Each part graded by its own type, sharing the points by weight. A written part goes to marking |
 
-### 4.4 Stretch: adaptive and analytics
-- **Item analysis:** difficulty (percent correct), discrimination (point-biserial correlation), distractor analysis. Flags bad questions automatically.
-- **Adaptive mode:** pick the next question based on running performance. Starts as simple, explainable difficulty stepping ("answered correctly, so next is one level harder"); item response theory (IRT) based computerized adaptive testing (CAT) is the research-grade version. This is statistics, not AI, but keep the simple version first so it stays explainable.
-- **Per-student feedback:** topic-level mastery breakdown after submission.
+Every question can also have **wording variants**: names, places or units that differ per student, written as `[[name]]` anywhere in the question. They're defined once as a table (one row per student) or as lists, and they work for every type. Question text is **Markdown** with **maths** between `$$ … $$`; single `$` signs stay as money. **Templates**: "New question" offers worked examples of each type, and "New exam" offers presets (quick quiz, practice, midterm).
 
-## 4.5 Educator Clarity and Verification
+## The engine
 
-The audience is a teacher who is not a developer. Goal: they can build an exam, see exactly what it will do, and prove it is correct before a single student touches it.
+All of `src/engine/` is pure TypeScript: no React, no database (lint-enforced). It runs identically on the server, in the browser preview, and in tests.
 
-### Authoring that explains itself
-- **Plain-language blueprint summary** at the top of the exam builder, rewritten live: "Each student gets 10 questions: 5 from Cell Biology (easy 2, medium 3), 3 from Genetics, 2 from Ecology. Total 20 points. Estimated time 25 min."
-- **Pool health indicators:** warn when a pool is too small for the blueprint ("Genetics has 4 questions but 5 are requested"), when too many questions are near-identical, or when points do not add up.
-- **Probability view:** for any question, show "appears on about 33% of student exams." Weights are shown as percentages, not abstract numbers.
-- **Live preview with a seed:** see the question exactly as a student would, press "Reroll" to see other versions. Shows the variable values used and the computed answer.
-- **Variant explorer:** for a parameterized question, show a table of 20 generated variants with their answers side by side, so the educator can spot-check the math and any weird edge cases (negative numbers, divide by zero).
+**Randomness.** The engine has its own PRNG (`sfc32` seeded by `cyrb128`), pinned by golden tests and never changed. Each attempt has one seed, and each question's seed is `hash(attemptSeed : questionVersionId)`. Separate random streams are *forked by label*, so adding a feature never shifts existing draws. A golden digest test (`src/engine/golden/`) proves that today's definitions still generate byte-for-byte what they did.
 
-### Verify before publishing
-- **Pre-flight checklist** (blocking and non-blocking items): every question has an answer key, every parameterized question generates successfully 1,000 times, points total matches, time limit set, access settings set, no empty pools.
-- **"Take it as a student" mode:** run the whole exam in a sandboxed attempt that is flagged as a preview and excluded from results.
-- **"Take it as a perfect student" auto-run:** the app answers every question with its own key and must score 100%. Failure means a broken key. A wrong-answer run should score 0 (or the expected penalty).
-- **Simulation:** generate N fake attempts (e.g. 200) with random answers and show the score distribution, how often each question is drawn, and how balanced topics are across students.
+**Selection** (`src/engine/selection/`). A blueprint is a list of sections: "*N* questions from these topics":
+- Draws are weighted sampling without replacement (Efraimidis–Spirakis), seeded per question, so pool order doesn't matter.
+- A section can fix its **difficulty mix** ("2 easy, 3 hard").
+- A section that spans several topics can set **minimums and maximums per topic**.
+- **Variant groups** (at most one per group) and **conflicts** (never together) are respected, and every skip is recorded.
+- The selector returns a trace, and the UI turns that trace into sentences: "drawn from Genetics, ranked 1 of 6; its weight is 25% of the candidates."
 
-### Verify after the exam (grading transparency)
-- **Per-question score explanation:** "Blank 2: expected 4.0 (tolerance ±0.1), student wrote 4.05, correct, +1 point." Shown for every graded item.
-- **Answer-key view per student:** exact instance the student saw (with variable values) next to their response and the key.
-- **Reproduce button:** regenerate any student's exam from its seed and confirm it matches what was stored.
-- **Audit log** for every educator action: who changed a key, regraded, granted extra time, overrode a score, and when, with before/after values.
-- **Regrade preview:** show which students' scores would change, by how much, before confirming.
-- **Export everything:** CSV for scores, plus a full per-student PDF/print view for records and disputes.
+**Generation.** All generation goes through `generateQuestion()` (`src/engine/generate.ts`), which applies wording variants and then calls the type's own generator. The generated **instance is frozen** in `attempt_items`. It is what the student saw and what is graded, even if the question is edited later.
 
-### UX conventions
-- Inline help text and examples in every editor, short and concrete, no jargon.
-- Templates and a sample course so the first exam takes minutes.
-- Undo and version history on questions; publishing an exam locks the questions it uses by version.
-- Every number the educator sees is clickable to show how it was calculated.
-
-## 5. Exam Lifecycle and Access
-
-States: `draft -> scheduled -> open -> closed -> graded -> released`
-
-- **Student home:** list of exams with info (title, topics, length, rules, window, attempts allowed, status). Info visible before open.
-- **Entry:** when `open` (manually by admin or by schedule), student clicks Enter. If the exam requires a code, they enter a **single-use, per-person code**; it is verified and bound to their account at entry, so it cannot be reused by anyone else.
-- **Attempt:** server creates the attempt, generates all instances from the seed, starts the server-side timer.
-- **In-exam:** autosave on every change, resume after disconnect, flag-for-review, question navigator, optional one-way navigation, per-question and per-exam time limits.
-- **Close:** auto-submit at time-out, late-submission rules, admin extensions (per-student accommodations like +25% time).
-- **Results:** configurable release (score only, with answers, with feedback, with explanations).
-
-## 6. Embedded Apps and External Tasks
-
-Realistic options, easiest to hardest:
-
-1. **Native widgets (do this first).** Spreadsheet (Univer), table, code editor, whiteboard/diagram canvas, all rendered in-app, so grading is trivial because you own the state.
-2. **Sandboxed iframe + `postMessage` protocol.** Any web tool can be embedded if it speaks a small protocol: exam sends `init(state)`, widget sends `response(state)` and `ready`. Lets third parties (or you) build simulators, e.g. a circuit sim, a POS system mock, a booking-engine mock.
-3. **Hosted third-party tools** (Google Sheets, Excel Online): possible via embed, but you cannot reliably read the student's work back without OAuth plus their APIs. Treat as a later experiment; native widgets give you 90% of the value.
-4. **Desktop-app tasks** (real Excel, etc.): file upload and server-side parsing (e.g. SheetJS/ExcelJS to inspect formulas and values). Works, but is a different UX: download, work, upload.
-
-For a hospitality/finance flavor, a mock **point-of-sale (POS) or property management system (PMS) simulator** as an iframe widget would be a strong demo of this idea.
-
-## 7. Data Model (sketch)
+**Grading.** Grading is pure and returns lines like this one:
 
 ```
-users(id, role[admin|instructor|student], ...)
-courses(id, ...) / enrollments(user_id, course_id)
-topics(id, course_id, name)
-questions(id, topic_id, type, def_json, weight, difficulty, points, tags[], version, status)
-question_versions(...)                       -- immutable history; attempts reference a version
-exams(id, course_id, title, settings_json, blueprint_json, state, opens_at, closes_at)
-exam_codes(id, exam_id, code_hash, assigned_user_id?, used_at?)
-attempts(id, exam_id, user_id, seed, started_at, deadline_at, submitted_at, state)
-attempt_items(id, attempt_id, question_version_id, position, instance_json)  -- frozen generated instance
-responses(id, attempt_item_id, response_json, updated_at)
-grades(id, attempt_item_id, score, max, feedback, graded_by[auto|user|llm], needs_review)
-events(id, attempt_id, type, payload, ts)    -- focus loss, paste, reconnects (logged, not enforced)
+Blank 2 · expected 4, within ±0.1 · got "4.05" · correct · +1 of 1
 ```
 
-Key idea: **freeze the generated instance** in `attempt_items`. Even if the template changes later, the attempt remains gradeable.
+Line points always add up to the score, and only the total is rounded. Penalties never take a question below zero. Hand-marked lines stay "awaiting a grader" until a person ticks the rubric.
 
-## 8. Integrity (kept in mind, not built)
+**Adaptive exams** (`src/engine/adaptive-live.ts`). These are optional. The next question is chosen on the server after each answer, by one of two rules:
+- **Staircase:** a right answer moves to the next harder level, a wrong one to the next easier level.
+- **Rasch:** an ability estimate (EAP over a fixed grid) picks the question whose difficulty is closest. Difficulties come from past results once a question has 30 of them, and from its level until then.
 
-Cheap and honest measures only:
-- Per-student randomization (already the best deterrent: no two students see the same numbers or order)
-- Shuffled option order, question order
-- Event log (tab blur, paste, long idle, reconnects) surfaced as *signals* for the instructor, never auto-penalties
-- Optional: time-per-question analytics, answer-similarity detection after the fact
-- Architecture leaves room for stronger tooling later because the server already owns state
+The plan, including each question's difficulty, is frozen when the attempt starts. Each step records the result it was chosen on, so the whole path can be replayed even after a regrade.
 
-## 9. Build Phases
+**Code sandbox** (`src/engine/sandbox/`). Student JavaScript runs in QuickJS compiled to WebAssembly:
+- There's no network, file system or page access.
+- Work is capped by a *step count* rather than wall-clock time, so results don't depend on machine speed. Memory and stack are capped too.
+- `Date` and `Math.random` are fixed.
+- The same engine runs the student's "Run the example tests" button and the grader.
 
-**Phase 0: Foundation**
-Next.js, Tailwind, shadcn, Drizzle, Postgres, auth, role-based access control (RBAC) for admin/instructor/student, design tokens, CI (continuous integration) with Vitest + Playwright.
+**Explainability as data.** The selector, generator, grader, pre-flight, summary, statistics and item analysis all return structured explanations, and the UI only renders them. Dotted-underlined numbers open their working: the average and median on results, the points and time totals in the builder, difficulty and discrimination in analysis.
 
-**Phase 1: Core engine (no UI polish yet)**
-Question type interface, Zod schemas, seeded RNG, generators, MCQ/TF/short-answer types, graders with unit tests, blueprint selector with unit tests. *This is the heart; test it hard.*
+## Checking an exam
 
-**Phase 2: Author experience**
-Question bank UI, topic management, editor per type with live preview ("preview with seed X"), exam builder with blueprint and settings, plus the educator-clarity features from section 4.5 (plain-language blueprint summary, pool health, variant explorer, pre-flight checklist, perfect-student auto-run, simulation). Build these alongside the editors, not afterward.
+The **Build** tab rewrites the blueprint as sentences and updates them as you type. For example: "Each student gets 10 questions: 5 from Cell Biology (2 easy, 3 hard)… Total 20 points. Estimated time about 25 min." Below that are:
+- **pool health:** a pool too small for its section, variant groups too small, unequal points, near-identical questions;
+- each question's chance of appearing ("about 33% of exams", from 1,000 real selector runs);
+- the expected Bloom-level mix per student;
+- a sample student for any seed, with the reasons each question was drawn.
 
-**Phase 3: Student experience**
-Home, exam info, entry flow with codes, exam-taking screen (autosave, timer, navigator), submission, results.
+**Undo and redo** cover the question editor and the blueprint.
 
-**Phase 4: More question types**
-Ordering, matching, cloze, numeric/parameterized, long answer plus review queue, table fill.
+Each question has a live preview with a seed and a **Reroll** button. It shows the variable values used, the answer key and a "try answering" grader. A **variant explorer** shows 20 versions side by side.
 
-**Phase 5: Admin ops**
-Open/close controls, live dashboard (who is in, progress), time extensions, regrade tool with preview, audit log, reproduce-from-seed, CSV and print export.
+**Verify** runs the **pre-flight checklist**. Blocking items stop publishing:
+- every section can be filled;
+- every question is complete and generates 1,000 times without an error;
+- points add up;
+- the time limit compares sensibly with the estimate;
+- access settings are chosen;
+- adaptive exams have a pool that can carry every student through;
+- answering every question with its own key scores 100%, leaving everything blank scores 0, and answering everything wrong earns nothing (or only the expected negative marking).
 
-**Phase 6: Showpieces**
-Spreadsheet widget, iframe widget protocol plus a demo simulator, item analysis, adaptive mode (explainable version first). No AI features in this phase or earlier.
+Verify also has:
+- **Simulate 200 students:** topic balance, how often each question is drawn, and the score spread with random answers;
+- **Take it as a student:** a preview attempt, flagged and excluded from results;
+- an **adaptive preview** of the path a pretend student would take.
 
-**Phase 7: Polish**
-Accessibility pass (keyboard, screen reader, contrast), mobile layout, empty/error states, dark mode, demo seed data.
+Publishing locks the exam to the question versions current at that moment, so later edits never change a published exam.
 
-**Status (Nov 2026):** Phases 0–7 are built. Deliberately left for later:
-- Question types from §3 not yet built: categorization, hotspot, label-the-diagram, composite/passage, code, and drag-in chips for cloze.
-- The live board polls every 5 s (paused in hidden tabs) rather than using Realtime.
-- Adaptive mode is a rules preview only; live attempts use the fixed draw.
-- Distractor analysis covers choice types only.
+## Running an exam
 
-## 10. Kickoff Notes for Claude Code
+Exam states are `draft → scheduled → open → closed → graded → released`. A schedule opens and closes an exam on time without any background job (`effectiveState()`).
 
-- Put sections 1, 3, and 7 into `CLAUDE.md` so every session shares the architecture.
-- Build Phase 1 test-first; each question type is one folder: `types/<id>/{schema,generate,grade,Editor,Renderer,tests}`.
-- Keep graders and generators free of React and database imports so they run anywhere (browser preview, server, tests).
-- Seed the database with one demo course and about 40 questions across 4 topics so every feature has something to show.
-- Decide naming and visual identity early (typeface, one accent color or none), then enforce it through design tokens.
+- **Entry** can require a **single-use, per-person code**. The code is hashed, then bound to the student at the moment they redeem it.
+- The **exam screen** autosaves every change (with ordering and retries), resumes after a disconnect, and has flag-for-review, a navigator and a server-synced timer. It also announces time for screen readers and moves focus to each new question.
+- **One-way** and **per-question time limits** are enforced by the server. It hands out and accepts only the current question, and a timed question locks when its time is up.
+- **Late work** follows the exam's policy: either submit automatically at the deadline (the default), or accept work for a set window, taking a percentage of the points earned per minute late, up to a cap. Students see the working.
+- **Extensions** are per student, a multiplier (for example ×1.25), extra minutes, or both. They apply to attempts already in progress: the open exam picks up the new deadline straight away.
+- The **live board** on Run shows who's in, their progress, which question each is on, time left and signals. It updates through **Supabase Realtime**, with a polling fallback.
+- **Signals** are logged but never enforced: tab switches, pastes, idle periods, going offline, and time per question.
 
-## 11. Open Decisions
+## After the exam
 
-- Name and brand
-- Supabase (auth + realtime + DB in one) vs. Neon + Auth.js (more modular)
-- AI is out of scope for v1 (decided); revisit only as an optional, clearly labeled assist after the deterministic core is solid
-- Single-tenant demo vs. multi-organization from day one (recommend single-tenant, with an `org_id` column kept for later)
+- **Results:** stats (each one explains itself), every attempt, and the full audit trail for the exam.
+- **Attempt view:** exactly what the student saw, their answer, the key, their variable values, approximate time per question, the grade lines, and (for adaptive exams) why each question was picked. **Reproduce** rebuilds the exam from its seed and confirms it matches.
+- **Marking:** one question across every student at a time, anonymous by default. It's rubric-based, with keyboard shortcuts (1–9 to tick, Enter to save, S to skip). It works for every hand-marked type, including written parts of passages.
+- **Score changes by hand** keep the grader's lines and add one adjustment line with the reason.
+- **Regrade:** edit a question, preview who would gain or lose what, then apply. Hand-marked and hand-changed scores are kept.
+- **Item analysis:**
+  - difficulty (share of points earned) and discrimination (point-biserial against the rest of the exam);
+  - which options or choices students picked, for every type with choices, overall and in the top and bottom 27%;
+  - typical time per question;
+  - automatic flags: too easy, too hard, low or negative discrimination, dead distractors, small sample.
+- **Similarity signals:** pairs of students who shared the same *uncommon wrong* answer on several questions, or whose written answers share most of their five-word phrases. Each comes with its reasons. It's a prompt to look, never a penalty.
+- **Release:** students see one of four levels: score only, plus answers, plus feedback, or full explanations. Results also break down by topic and by learning objective (`lo:` tags).
+- **Exports:** a summary CSV (scores, extra time, signals, lateness), an answers CSV (one row per answer), and print or PDF for one attempt or the whole class.
+
+## Embedded widgets
+
+Any web tool can be a question if it speaks a three-message `postMessage` protocol (`src/engine/widget.ts`):
+
+```
+exam   → widget   { type: "exam:init", version: 1, state, config, readOnly }
+widget → exam     { type: "exam:ready", version: 1 }
+widget → exam     { type: "exam:response", version: 1, state }
+```
+
+The exam stores `state` as the answer, and checks read values out of it (`total`, `order.length`). Widgets are static files in `public/widgets/`, served same-origin in a sandboxed iframe, and chosen from a registry rather than typed as URLs. Two demos are included:
+- `pos-demo`, a point-of-sale till;
+- `pms-demo`, a hotel front desk: check a guest into a suitable clean room and post charges to the folio.
+
+## Architecture
+
+| Layer | Choice | Notes |
+| --- | --- | --- |
+| Framework | Next.js 16 (App Router), React 19, TypeScript | Middleware is `src/proxy.ts`. It only refreshes the session and sends signed-out visitors to `/login`. Roles are checked on every page and action. |
+| UI | Tailwind CSS v4, shadcn/ui on Radix | Black and white plus one accent, `--brand`. Shared pieces in `src/components/ui`. Dark mode included. |
+| Data | Supabase Postgres + Drizzle ORM | Drizzle (as owner) does every read and write. RLS is on for every table as defense in depth. |
+| Auth | Supabase Auth | Role lives in `profiles.role` and is mirrored into the JWT. Deactivated profiles count as signed out. |
+| Realtime | Supabase Realtime (`postgres_changes` on `exams` and `attempts`) | Used only as a "something changed" signal; the page then refetches from the server. Falls back to polling. |
+| Storage | Supabase Storage, private buckets | `assets` (images, starter workbooks) and `submissions` (uploaded workbooks). Downloads go through `/assets/[id]`, which checks access and redirects to a 5-minute signed URL. |
+| Validation | Zod | One set of schemas per question type, shared by editor, renderer and grader |
+| Maths and formulas | mathjs (locked down) | Variables, constraints and answer formulas |
+| Spreadsheets | HyperFormula | In-browser sheet and the uploaded-workbook checks. ExcelJS reads `.xlsx` uploads on the server. |
+| Rich text | react-markdown, remark-gfm/-math/-breaks, rehype-katex, KaTeX | No raw HTML. Images only from the course's own uploads. |
+| Drag and drop | dnd-kit | Every drag also works by tap and keyboard |
+| Code | QuickJS (WebAssembly) sandbox, CodeMirror 6 editor | Both load lazily |
+| Tests | Vitest (with fast-check), Playwright with axe-core | See [Testing](#testing) |
+
+The state of an attempt in progress lives on the server, and components use server actions and local state; there's no client data cache. Motion is a short CSS fade, turned off when the browser asks for reduced motion.
+
+Code layout:
+
+- `src/engine/`: pure logic: selection, generation, grading helpers, pre-flight, simulation, analysis, the adaptive engine, IRT, the sandbox, and explanations
+- `src/question-types/<id>/`: one folder per type. Core registry in `registry.ts`; UI registry in `ui-registry.ts` (client only)
+- `src/server/`: server-only data access: `authoring`, `attempts`, `run`, `teach`, `admin`, `review.ts`, `assets.ts`
+- `src/app/`: routes: `(student)`, `attempt`, `teach`, `admin`, `assets`, `login`
+- `src/db/`: Drizzle schema and the seed (`src/db/seed/`)
+- `supabase/migrations/`: Drizzle-generated SQL plus hand-written RLS, triggers and storage buckets
+- `public/widgets/`: embeddable widgets (public files: never put anything secret here)
+- `e2e/`: Playwright specs
+
+## Data model
+
+Defined in `src/db/schema.ts`. Every top-level table carries `org_id`; it's single-tenant today, but ready for more.
+
+| Table | Holds |
+| --- | --- |
+| `orgs` | The organisation and its defaults for new exams |
+| `profiles` | One per `auth.users` row: name, role, deactivated time |
+| `courses`, `enrollments` | Courses, and who teaches or takes each one |
+| `topics` | A course's topics, in order |
+| `questions` | The editable question: type, definition (JSONB), weight, difficulty, points, tags, variant group, conflicts, status |
+| `question_versions` | An immutable copy of every saved version. Exams and attempts only reference these. |
+| `exams` | Blueprint and settings (JSONB), state, schedule, and `locked_versions` from publish |
+| `exam_codes` | Single-use entry codes (hashed), with who used them and when |
+| `attempts` | Seed, deadline, state and score. Plus the sequential cursor, late window and penalty, last-seen time, and the frozen adaptive plan |
+| `attempt_items` | The **frozen generated instance** per position. Also the version it was seeded from and the version it's graded against now, the flag, opened and locked times, and the adaptive trace |
+| `responses` | The latest answer per item, with a sequence number for ordering |
+| `grades` | Score, max and explanation lines. Also who graded it, whether it needs review, and the reason for any hand change |
+| `events` | Signals and views (tab switches, pastes, idle, views), never enforced |
+| `extensions` | Per-student extra time, for one exam or all of them |
+| `audit_log` | Every staff action with before and after values |
+| `assets` | Uploaded images and workbooks: storage path, type, size, dimensions, hash |
+
+## Getting started
+
+**You need** Node 24 and a Supabase project (or the Supabase CLI with Docker for a local one).
+
+```bash
+npm install
+cp .env.example .env.local      # fill in the Supabase URL, keys, DATABASE_URL and SEED_PASSWORD
+npm run db:push                 # apply supabase/migrations (tables, RLS, triggers, storage buckets)
+npm run db:seed                 # demo org, accounts, courses, banks and exams
+npm run dev                     # http://localhost:3000
+```
+
+| Variable | Used for |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Auth and Realtime in the browser |
+| `SUPABASE_SECRET_KEY` | Server only: account management, storage, the seed |
+| `DATABASE_URL` | Drizzle at runtime and the seed (the transaction pooler) |
+| `SEED_PASSWORD` | Password for the demo accounts |
+
+**Demo accounts**, all `@example.com` with `SEED_PASSWORD`:
+- `admin`
+- `instructor`, who teaches BIO 101
+- `instructor2`, who teaches CHEM 101
+- `student`, enrolled in both
+
+The organisation is "Northfield College". The seed creates:
+- a BIO bank of 30 questions over four topics;
+- a draft midterm, an open quiz, and a released practice exam with 30 graded students;
+- a CHEM bank with a draft exam;
+- two showcase banks covering every question type:
+  - "Lab Skills Check" and a "Lab Report" with six answers waiting to be marked;
+  - "Field Skills Check", for the newer types, with generated images and a starter workbook.
+
+The seed is safe to run again: it only adds what's missing.
+
+**Scripts**
+
+| Command | Does |
+| --- | --- |
+| `npm run dev` / `build` / `start` | Next.js |
+| `npm run typecheck` / `lint` | Route types + `tsc`; ESLint (including jsx-a11y and the engine purity rule) |
+| `npm test` / `test:coverage` | Vitest; coverage of the engine and question types (kept at 95%+ lines) |
+| `npm run test:e2e` | Playwright against `next dev` and a seeded database |
+| `npm run db:generate` | Generate a migration from `src/db/schema.ts` |
+| `npm run db:push` | Apply migrations to the linked Supabase project |
+| `npm run db:seed` | Seed or top up the demo data |
+
+**Making a schema change:** edit `src/db/schema.ts`, then run `npm run db:generate`, then `npm run db:push`. For hand-written SQL (RLS, triggers), run `npx drizzle-kit generate --custom --name <name>` instead of `db:generate`.
+
+**Adding a question type:**
+1. Write `core.ts` (pure) and `ui.tsx` in `src/question-types/<id>/`.
+2. Register the core in `registry.ts` and the UI in `ui-registry.ts`.
+3. Add fixtures to `fixtures.ts`.
+4. Add an example question to the seed content.
+
+The contract suite then checks it over 1,000 seeds: deterministic, JSON-safe, key earns full marks, blank earns 0, wrong earns nothing, redaction removes the key. Optional hooks cover hand marking (`review`), a wrong-answer run, time estimates, item analysis tokens, async setup, and responses written only by the server.
+
+## Testing
+
+- **Unit (Vitest):**
+  - the question-type contract suite, over 1,000 seeds per fixture;
+  - golden tests for the PRNG and for generation (proving old exams still generate the same);
+  - tests for every grader, the selector, pre-flight, simulation, analysis, IRT, adaptive paths, the sandbox, similarity, late policy, time per question, the file parsers and the seed content;
+  - property tests with fast-check.
+- **End-to-end (Playwright, with axe accessibility checks on every screen):**
+  - the student flow, including resume;
+  - every editor and preview;
+  - both showcase exams, including an image loading and a workbook upload;
+  - one-way timed exams, adaptive exams, Realtime updates, the widgets, admin and live operations, dark mode and phone layout.
+
+  `e2e/global-setup.ts` resets the demo exams' attempts before each run.
+- **CI** (`.github/workflows/ci.yml`):
+  - every push: typecheck, lint, unit tests and a build;
+  - an `e2e` job against a local Supabase on the runner, also nightly. It's non-blocking while it proves itself.
+
+## Known limits and licences
+
+- **HyperFormula is GPL-3.0** unless you buy a commercial licence. That matters for the spreadsheet and file-task types. Decide before distributing.
+- **The QuickJS sandbox is pinned** (`quickjs-emscripten` 0.32.0, exact). Step counts are deterministic for one build, so changing the version can change which very slow solutions pass. Code questions are JavaScript only.
+- **Drawing has no keyboard path.** The whiteboard needs a pointer, so students who can't draw should be offered another question. Hotspot and every drag interaction do work by keyboard.
+- **Some types can't drive adaptive exams.** Hand-marked types (long answer, whiteboard, and passages that contain them) are left out of the adaptive pool, because their result isn't known in time to choose the next question.
+- **Integrity is signals only.** Similarity, tab switches, pastes and time on question are prompts to look, never penalties. Per-student randomisation is the main deterrent.
+- **Realtime is a nudge, not a feed.** Pages refetch from the server when told something changed, and poll if Realtime can't connect.
+- **Single organisation.** `org_id` is everywhere, but there is no UI for several organisations.
+- **Licence:** MIT (see `LICENSE`), apart from third-party terms such as HyperFormula's.

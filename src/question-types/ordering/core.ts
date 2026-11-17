@@ -76,6 +76,18 @@ export const ordering = defineQuestionType<OrderingDef, OrderingInstance, Orderi
 
   randomResponse: (inst, rng) => ({ order: rng.shuffle(inst.key) }),
 
+  // Fully reversed: no pair of items is in the right order.
+  wrongResponse: (inst) => ({ order: [...inst.key].reverse() }),
+
+  estimateSeconds: (def) => 20 + 12 * def.items.length,
+
+  // Where each item was put: "item b in position 1".
+  analysisTokens: (_inst, r) => r.order.map((id, i) => `${id}@${i + 1}`),
+  tokenUniverse: (inst) => ({
+    tokens: inst.items.flatMap((it) => inst.key.map((_, i) => ({ id: `${it.id}@${i + 1}`, text: `${it.text} in position ${i + 1}` }))),
+    key: inst.key.map((id, i) => `${id}@${i + 1}`),
+  }),
+
   validateDef(def) {
     const issues: PreflightIssue[] = [];
     if (!def.stem.trim()) {

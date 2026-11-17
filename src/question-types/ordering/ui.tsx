@@ -1,5 +1,7 @@
 "use client";
 
+import { withFormatHint } from "../hints";
+import { Prose } from "@/components/ui/prose";
 import {
   DndContext,
   KeyboardSensor,
@@ -141,12 +143,15 @@ export const orderingUi: QuestionTypeUi<OrderingDef, StudentInstance, OrderingRe
     const set = (items: OrderingDef["items"]) => onChange({ ...def, items });
     return (
       <div className="grid gap-5">
-        <Field label="Question">
+        <Field label="Question" hint={withFormatHint("Say what decides the order, e.g. “Put the stages of mitosis in order, first to last.”")}>
           <Textarea value={def.stem} onChange={(e) => onChange({ ...def, stem: e.target.value })} />
         </Field>
         <div className="grid gap-2">
           <span className="text-sm font-medium">Items, in the correct order</span>
-          <p className="text-xs text-muted-foreground">Write them top to bottom as they should end up. Students see them shuffled.</p>
+          <p className="text-xs text-muted-foreground">
+            Write them top to bottom as they should end up. Students see them shuffled. Partial credit is the share of
+            pairs in the right order: swapping two neighbours in a list of five still earns 90%.
+          </p>
           <SortableList
             items={def.items}
             onReorder={(ids) => set(ids.map((id) => def.items.find((i) => i.id === id)!))}
@@ -184,7 +189,7 @@ export const orderingUi: QuestionTypeUi<OrderingDef, StudentInstance, OrderingRe
     const byId = new Map(instance.items.map((i) => [i.id, i.text]));
     return (
       <div className="grid gap-4">
-        <p className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <Prose className="text-base">{instance.stem}</Prose>
         {!readOnly && <p className="text-xs text-muted-foreground">Drag to reorder, or use the arrows. Your order is saved once you move an item.</p>}
         <SortableList
           items={shown.map((id) => ({ id }))}

@@ -33,7 +33,7 @@ export default async function EditQuestionPage({ params }: PageProps<"/teach/que
         // A new saved version should reset local state to what the server holds.
         key={`${question.id}:${question.version}`}
         typeId={question.type}
-        topics={topics.map((t) => ({ id: t.id, name: t.name, courseTitle: t.courseTitle }))}
+        topics={topics.map((t) => ({ id: t.id, name: t.name, courseId: t.courseId, courseTitle: t.courseTitle }))}
         initial={{
           id: question.id,
           topicId: question.topicId,

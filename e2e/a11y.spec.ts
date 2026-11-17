@@ -57,7 +57,7 @@ test("admin pages", async ({ page }) => {
   }
 });
 
-const TYPES = ["mcq", "true-false", "dropdown", "short-answer", "ordering", "matching", "cloze", "numeric", "long-answer", "table-fill", "spreadsheet", "widget"];
+const TYPES = ["mcq", "true-false", "dropdown", "short-answer", "ordering", "matching", "cloze", "numeric", "long-answer", "table-fill", "spreadsheet", "widget", "categorization", "hotspot", "label-diagram", "whiteboard", "file-task", "code", "composite"];
 
 test("every question type's editor and preview", async ({ page }) => {
   await signIn(page, "instructor@example.com");

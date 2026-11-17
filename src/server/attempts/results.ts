@@ -6,6 +6,7 @@ import { shapeItemResult, instanceFeedback, type ShownItemResult } from "@/engin
 import { visibility } from "@/engine/attempts/release";
 import { examSettingsSchema } from "@/engine/exam";
 import { topicMastery } from "@/engine/mastery";
+import { masteryByObjective } from "@/engine/tags";
 import type { GradeLine } from "@/engine/types";
 import { getQuestionType } from "@/question-types/registry";
 import type { CurrentUser } from "@/server/auth";
@@ -38,6 +39,7 @@ export async function loadResults(user: CurrentUser, attemptId: string) {
       needsReview: grades.needsReview,
       topicId: topics.id,
       topicName: topics.name,
+      tags: questionVersions.tags,
     })
     .from(attemptItems)
     .innerJoin(questionVersions, eq(questionVersions.id, attemptItems.questionVersionId))
@@ -54,7 +56,9 @@ export async function loadResults(user: CurrentUser, attemptId: string) {
     score: attempt.score ?? 0,
     max: attempt.maxScore ?? 0,
     pendingReview: attempt.state === "submitted",
+    latePenalty: (attempt.latePenalty as { explanation: string; points: number } | null) ?? null,
     mastery: topicMastery(rows.map((r) => ({ topicId: r.topicId, topicName: r.topicName, score: r.score ?? 0, max: r.max ?? 0, needsReview: r.needsReview ?? false }))),
+    objectives: masteryByObjective(rows.map((r) => ({ tags: r.tags ?? [], score: r.score ?? 0, max: r.max ?? 0, needsReview: r.needsReview ?? false }))),
     items: rows.map((r) => {
       const shown: ShownItemResult = shapeItemResult(v, {
         score: r.score ?? 0,

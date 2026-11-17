@@ -1,10 +1,12 @@
 import { roundScore } from "./grading/format";
+import type { Explanation } from "./types";
+import { questionTypes } from "@/question-types/registry";
 
 export interface AnalysisItem {
   questionId: string;
   score: number;
   max: number;
-  /** Option ids the student chose (choice-type questions only). */
+  /** Tokens the student chose (types with discrete choices only; see responseTokens). */
   chosen?: string[] | null;
 }
 
@@ -138,12 +140,46 @@ export function withDeadDistractors(stat: ItemStats, optionIds: readonly string[
   };
 }
 
-/** Which option ids a saved response picked, for the choice types; null for the rest. */
-export function chosenOptions(type: string, response: unknown): string[] | null {
-  if (!response || typeof response !== "object") return null;
-  const r = response as Record<string, unknown>;
-  if (type === "mcq" && Array.isArray(r.selected)) return r.selected.filter((x): x is string => typeof x === "string");
-  if (type === "dropdown" && typeof r.selected === "string") return [r.selected];
-  if (type === "true-false" && typeof r.value === "boolean") return [String(r.value)];
-  return null;
+/**
+ * What a saved response chose, as the type's analysis tokens; null when the
+ * type has no discrete choices or the response doesn't parse.
+ */
+export function responseTokens(typeId: string, instance: unknown, response: unknown): string[] | null {
+  if (response === null || response === undefined) return null;
+  const type = questionTypes.get(typeId);
+  if (!type?.analysisTokens) return null;
+  const parsed = type.responseSchema.safeParse(response);
+  return parsed.success ? type.analysisTokens(instance, parsed.data) : null;
+}
+
+/** Every token a question offers, with text and the key; null for types without choices. */
+export function tokenUniverse(typeId: string, instance: unknown) {
+  return questionTypes.get(typeId)?.tokenUniverse?.(instance) ?? null;
+}
+
+/** The working behind an item's "percent correct" and "discrimination", for the educator. */
+export function explainItem(s: Pick<ItemStats, "n" | "difficulty" | "discrimination">): { difficulty: Explanation; discrimination: Explanation } {
+  const small = s.n < MIN_SAMPLE ? `Only ${s.n} students answered; below ${MIN_SAMPLE} these numbers move a lot between groups.` : undefined;
+  return {
+    difficulty: {
+      formula: "For each student, the points they earned on this question ÷ the points it was worth; then the average of those shares.",
+      inputs: [
+        { label: "Students who answered", value: String(s.n) },
+        { label: "Average share earned", value: `${Math.round(s.difficulty * 1000) / 10}%` },
+        { label: "Flagged when", value: "above 90% (too easy) or below 20% (too hard)" },
+      ],
+      note: small,
+    },
+    discrimination: {
+      formula:
+        "How closely scoring well on this question goes with scoring well on the rest of the exam (Pearson correlation of this question's score with each student's total minus this question). 1 means the strongest students always got it, 0 means no link, below 0 means weaker students did better.",
+      inputs: [
+        { label: "Students", value: String(s.n) },
+        { label: "Correlation", value: s.discrimination === null ? "n/a (everyone scored the same)" : String(Math.round(s.discrimination * 100) / 100) },
+        { label: "Good", value: "above 0.3" },
+        { label: "Flagged when", value: "below 0.2, or negative" },
+      ],
+      note: small,
+    },
+  };
 }

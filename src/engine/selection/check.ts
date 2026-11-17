@@ -1,6 +1,6 @@
 import { fmtNum } from "../grading/format";
 import type { PreflightIssue } from "../types";
-import type { Blueprint, PoolItem } from "./types";
+import { type Blueprint, type PoolItem, sectionTopics } from "./types";
 
 export type Names = Record<string, string>;
 
@@ -37,20 +37,25 @@ export function checkBlueprint(
   let maxTotal = 0;
 
   blueprint.sections.forEach((section, i) => {
-    const topic = nameOf(topicNames, section.topicId);
+    const ids = sectionTopics(section);
+    const topic = ids.map((t) => nameOf(topicNames, t)).join(" or ");
     const path = `sections[${i}]`;
-    const all = pool.filter((q) => q.topicId === section.topicId);
+    const all = pool.filter((q) => ids.includes(q.topicId));
     const drawable = all.filter((q) => q.weight > 0);
 
-    if (seenTopics.has(section.topicId)) {
-      issues.push({
-        severity: "warning",
-        code: "blueprint.duplicate-topic",
-        message: `${topic} appears in more than one section; consider merging them.`,
-        path,
-      });
+    for (const t of ids) {
+      if (seenTopics.has(t)) {
+        issues.push({
+          severity: "warning",
+          code: "blueprint.duplicate-topic",
+          message: `${nameOf(topicNames, t)} appears in more than one section; consider merging them.`,
+          path,
+        });
+      }
+      seenTopics.add(t);
     }
-    seenTopics.add(section.topicId);
+
+    if (section.limits) issues.push(...checkLimits(section.limits, ids, section.count, drawable, topicNames, path));
 
     const neverDrawn = all.length - drawable.length;
     if (neverDrawn > 0) {
@@ -126,5 +131,38 @@ export function checkBlueprint(
     });
   }
 
+  return issues;
+}
+
+/** Can the section's per-topic minimums and maximums all be met at once? */
+function checkLimits(
+  limits: Record<string, { min?: number; max?: number }>,
+  topics: string[],
+  count: number,
+  drawable: readonly PoolItem[],
+  topicNames: Names,
+  path: string,
+): PreflightIssue[] {
+  const issues: PreflightIssue[] = [];
+  const block = (code: string, message: string) => issues.push({ severity: "blocking", code, message, path: `${path}.limits` });
+  let minSum = 0;
+  let maxSum = 0;
+  for (const [t, l] of Object.entries(limits)) {
+    const name = nameOf(topicNames, t);
+    if (!topics.includes(t)) {
+      block("blueprint.limit-unknown-topic", `A limit is set for ${name}, which this section doesn't draw from.`);
+      continue;
+    }
+    const available = distinctDrawable(drawable.filter((q) => q.topicId === t));
+    if (l.min !== undefined && l.max !== undefined && l.min > l.max) block("blueprint.limit-min-above-max", `${name}: the minimum (${l.min}) is above the maximum (${l.max}).`);
+    if ((l.min ?? 0) > available) block("blueprint.limit-min-too-big", `${name} must give at least ${l.min}, but only ${available} of its questions can appear together.`);
+    minSum += l.min ?? 0;
+  }
+  for (const t of topics) {
+    const available = distinctDrawable(drawable.filter((q) => q.topicId === t));
+    maxSum += Math.min(limits[t]?.max ?? Infinity, available);
+  }
+  if (minSum > count) block("blueprint.limits-exceed-count", `The minimums add up to ${minSum}, but the section only asks for ${count}.`);
+  if (maxSum < count) block("blueprint.limits-below-count", `With these maximums at most ${maxSum} questions can be drawn, but the section asks for ${count}.`);
   return issues;
 }

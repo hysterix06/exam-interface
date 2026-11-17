@@ -1,5 +1,7 @@
 "use client";
 
+import { withFormatHint } from "../hints";
+import { Prose } from "@/components/ui/prose";
 import { Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -96,7 +98,7 @@ export const widgetUi: QuestionTypeUi<WidgetDef, StudentInstance, WidgetResponse
 
     return (
       <div className="grid gap-5">
-        <Field label="Task">
+        <Field label="Task" hint={withFormatHint()}>
           <Textarea value={def.stem} onChange={(e) => set({ stem: e.target.value })} />
         </Field>
         <Field label="Widget" hint={info?.description}>
@@ -190,7 +192,7 @@ export const widgetUi: QuestionTypeUi<WidgetDef, StudentInstance, WidgetResponse
   Renderer({ instance, value, onChange, readOnly }) {
     return (
       <div className="grid gap-4">
-        <p className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <Prose className="text-base">{instance.stem}</Prose>
         <WidgetFrame
           id={instance.widget}
           config={instance.config}

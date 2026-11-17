@@ -72,7 +72,7 @@ test("an instructor can watch a live attempt, grant time, and read the results",
     });
   };
   const summary = await read("Export CSV");
-  expect(summary.split("\r\n")[0]).toBe("Student,Email,Status,Score,Out of,Percent,Started,Submitted,Extra time,Tab switches,Pastes,Attempt ID,Seed");
+  expect(summary.split("\r\n")[0]).toBe("Student,Email,Status,Score,Out of,Percent,Started,Submitted,Extra time,Tab switches,Pastes,Attempt ID,Seed,Minutes late,Late penalty (points)");
   expect(summary).toContain("student@example.com");
   expect(summary).toContain("+10 min");
   const answers = await read("Answers CSV");

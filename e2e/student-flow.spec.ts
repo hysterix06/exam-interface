@@ -78,3 +78,41 @@ test("written answers from the showcase wait in the marking queue", async ({ pag
   await page.goto("/teach/marking");
   await expect(page.getByText(/Lab Report/).first()).toBeVisible();
 });
+
+test("the field-skills exam renders the newer types, loads images and takes a workbook upload", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await signIn(page, "student@example.com");
+  await page.getByRole("link", { name: /Field Skills Check/ }).first().click();
+  await page.getByRole("button", { name: /start exam|resume/i }).click();
+  await expect(page).toHaveURL(/\/attempt\//);
+  const total = Number((await page.getByRole("heading", { name: /^Question 1 of \d+$/ }).textContent())!.match(/of (\d+)/)![1]);
+  for (let i = 1; i <= total; i++) {
+    if (i > 1) {
+      await page.getByRole("navigation", { name: "Questions" }).getByRole("button", { name: new RegExp(`^Question ${i}\\b`) }).click();
+      await expect(page.getByRole("heading", { name: `Question ${i} of ${total}` })).toBeFocused();
+    }
+    // Seed images come through the access-checked /assets route.
+    for (const img of await page.locator('main img[src^="/assets/"]').all()) {
+      await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBeGreaterThan(0);
+    }
+    const upload = page.getByLabel("Upload your .xlsx");
+    if (await upload.count()) {
+      const ExcelJS = (await import("exceljs")).default;
+      const wb = new ExcelJS.Workbook();
+      const s = wb.addWorksheet("Counts");
+      [["Quadrat", "Snails"], [1, 12], [2, 7], [3, 15], [4, 9], [5, 11]].forEach((r) => s.addRow(r));
+      s.getCell("B8").value = { formula: "SUM(B2:B6)", result: 54 } as never;
+      await upload.setInputFiles({ name: "my-counts.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: Buffer.from(await wb.xlsx.writeBuffer()) });
+      await expect(page.getByRole("status").filter({ hasText: "my-counts.xlsx" })).toContainText(/cells read/);
+    }
+    const run = page.getByRole("button", { name: /Run the example tests/ });
+    if (await run.count()) {
+      await run.click();
+      // The starter code returns nothing, so the visible tests fail, explained.
+      await expect(page.getByRole("status").filter({ hasText: "density(" })).toContainText(/expected/);
+    }
+    await audit(page, `field question ${i}`);
+  }
+  expect(errors).toEqual([]);
+});

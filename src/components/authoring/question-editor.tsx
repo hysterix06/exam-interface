@@ -8,15 +8,22 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { UndoButtons } from "@/components/ui/undo-buttons";
 import { questionLabel } from "@/lib/question-label";
+import { useUndoable } from "@/lib/use-undoable";
 import { getQuestionType } from "@/question-types/registry";
 import { getQuestionTypeUi } from "@/question-types/ui-registry";
+import { BLOOM_LEVELS, type BloomLevel, parseTags, setBloom, setObjectives } from "@/engine/tags";
+import { joinDef, splitDef, TEXT_VARS_KEY, type TextVars, validateQuestion } from "@/engine/generate";
+import { AssetCourseProvider } from "@/components/assets/asset-context";
 import { IssueList } from "./issue-list";
+import { WordingVariants } from "./wording-variants";
 import { QuestionPreview } from "./question-preview";
 
 export interface EditorTopic {
   id: string;
   name: string;
+  courseId: string;
   courseTitle: string;
 }
 
@@ -58,24 +65,32 @@ export function QuestionEditor({
   const type = getQuestionType(typeId);
   const { Editor } = getQuestionTypeUi(typeId);
 
-  const [def, setDef] = useState<unknown>(() => initial.def ?? getQuestionTypeUi(typeId).newDef());
+  const history = useUndoable<unknown>(() => initial.def ?? getQuestionTypeUi(typeId).newDef());
+  const def = history.value;
   const [topicId, setTopicId] = useState(initial.topicId);
   const [difficulty, setDifficulty] = useState(String(initial.difficulty));
   const [points, setPoints] = useState(String(initial.points));
   const [weight, setWeight] = useState(String(initial.weight));
   const [groupKey, setGroupKey] = useState(initial.groupKey ?? "");
-  const [tags, setTags] = useState(initial.tags.join(", "));
+  const initialTags = parseTags(initial.tags);
+  const [tags, setTags] = useState(initialTags.other.join(", "));
+  const [bloom, setBloomLevel] = useState<BloomLevel | "">(initialTags.bloom ?? "");
+  const [objectives, setObjectivesText] = useState(initialTags.objectives.join(", "));
   const [status, setStatus] = useState(initial.status);
 
   const pointsNum = Number(points) || 0;
 
   // Live checks use the very same validation the server enforces on activate.
-  const issues = useMemo(() => {
-    const parsed = type.defSchema.safeParse(def);
-    return parsed.success
-      ? type.validateDef(parsed.data)
-      : [{ severity: "blocking" as const, code: "malformed", message: "The question is incomplete." }];
-  }, [type, def]);
+  // Wording variants live beside the type's own definition; the type's editor never sees them.
+  const { def: typeDef, textVars } = useMemo(() => {
+    const raw = def as Record<string, unknown> | null;
+    const tv = raw && typeof raw === "object" ? (raw[TEXT_VARS_KEY] as TextVars | undefined) : undefined;
+    return { def: splitDef(def).def, textVars: tv ?? null };
+  }, [def]);
+  const setTypeDef = (next: unknown) => history.set(joinDef(next, textVars));
+  const setTextVars = (tv: TextVars | null) => history.set(joinDef(typeDef, tv));
+
+  const issues = useMemo(() => validateQuestion(type, def), [type, def]);
   const blocked = issues.some((i) => i.severity === "blocking");
 
   const save = () =>
@@ -88,7 +103,10 @@ export function QuestionEditor({
         weight: Number(weight),
         difficulty: Number(difficulty),
         points: Number(points),
-        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+        tags: setObjectives(
+          setBloom(tags.split(",").map((t) => t.trim()).filter(Boolean), bloom || null),
+          objectives.split(","),
+        ),
         groupKey: groupKey.trim() || null,
         status,
       });
@@ -110,7 +128,13 @@ export function QuestionEditor({
     <div className="grid gap-8 lg:grid-cols-2">
       <div className="grid content-start gap-8">
         <section className="grid gap-5">
-          <Editor def={def} onChange={setDef} />
+          <div className="-mb-2 flex justify-end">
+            <UndoButtons canUndo={history.canUndo} canRedo={history.canRedo} onUndo={history.undo} onRedo={history.redo} />
+          </div>
+          <AssetCourseProvider value={topics.find((t) => t.id === topicId)?.courseId ?? null}>
+            <Editor def={typeDef} onChange={setTypeDef} />
+          </AssetCourseProvider>
+          <WordingVariants value={textVars} onChange={setTextVars} />
         </section>
 
         <section className="grid gap-4 border-t pt-6 sm:grid-cols-2">
@@ -145,6 +169,19 @@ export function QuestionEditor({
           </Field>
           <Field label="Variant group (optional)" hint="Questions sharing a group name test the same idea; an exam draws at most one of them.">
             <Input value={groupKey} onChange={(e) => setGroupKey(e.target.value)} placeholder="e.g. mitosis-phases" />
+          </Field>
+          <Field label="Bloom level (optional)" hint="What kind of thinking it asks for. The exam builder shows the mix each student gets.">
+            <Select value={bloom} onChange={(e) => setBloomLevel(e.target.value as BloomLevel | "")}>
+              <option value="">Not set</option>
+              {BLOOM_LEVELS.map((l) => (
+                <option key={l} value={l}>
+                  {l[0].toUpperCase() + l.slice(1)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Learning objectives (optional)" hint="Comma-separated codes, e.g. BIO-3, BIO-4. Students see their points per objective.">
+            <Input value={objectives} onChange={(e) => setObjectivesText(e.target.value)} />
           </Field>
           <Field label="Tags (optional)" hint="Comma-separated, e.g. recall, chapter-3." className="sm:col-span-2">
             <Input value={tags} onChange={(e) => setTags(e.target.value)} />

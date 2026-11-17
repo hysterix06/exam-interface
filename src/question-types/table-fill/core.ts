@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { parseCloze } from "@/engine/cloze";
-import { checkBlank, expectedOf, keyOfBlank } from "@/engine/grading/blanks";
+import { checkBlank, expectedOf, keyOfBlank, wrongOfBlank } from "@/engine/grading/blanks";
 import { quote, roundScore } from "@/engine/grading/format";
 import { defineQuestionType } from "@/engine/question-type";
 import type { GradeLine, PreflightIssue } from "@/engine/types";
@@ -102,6 +102,10 @@ export const tableFill = defineQuestionType<TableFillDef, TableFillInstance, Tab
       ),
     };
   },
+
+  wrongResponse: (inst) => ({ blanks: Object.fromEntries(blanksIn(inst).map(({ b }) => [b.id, wrongOfBlank(b)])) }),
+
+  estimateSeconds: (def) => 20 + 20 * parseGrid(def).rows.flat(2).filter((s) => s.kind !== "lit").length,
 
   validateDef(def) {
     const issues: PreflightIssue[] = [];

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { blueprintTopics } from "@/engine/selection/types";
 import Link from "next/link";
 import { AdaptivePanel } from "@/components/authoring/exam-builder/adaptive-panel";
 import { VerifyPanel } from "@/components/authoring/exam-builder/verify-panel";
@@ -71,9 +72,9 @@ export default async function VerifyPage({ params }: PageProps<"/teach/exams/[id
 
       <Section
         title="Adaptive preview"
-        description="How difficulty stepping would behave on this pool. A preview of the rules only: live exams use the fixed draw."
+        description="How difficulty stepping walks a pretend student through this pool. Turn adaptive order on in Build to use it live; Rasch mode picks by ability estimate instead of fixed steps."
       >
-        <AdaptivePanel pool={pool.filter((q) => blueprint.sections.some((s) => s.topicId === q.topicId))} count={questionCount} questionNames={questionNames} />
+        <AdaptivePanel pool={pool.filter((q) => blueprintTopics(blueprint).includes(q.topicId))} count={questionCount} questionNames={questionNames} />
       </Section>
 
       {draft && (

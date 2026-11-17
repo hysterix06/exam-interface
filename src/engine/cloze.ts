@@ -6,7 +6,9 @@
 export type BlankSpec =
   | { kind: "text"; accepted: string[] }
   | { kind: "num"; value: number; abs: number; rel: number }
-  | { kind: "select"; options: string[]; correct: string };
+  | { kind: "select"; options: string[]; correct: string }
+  /** Drag-in chip: the student drops one chip from a shared bank; `answer` is the right chip's text. */
+  | { kind: "chip"; answer: string };
 
 /** "lit" is a run of plain sentence; every other kind is a blank. */
 export type ClozeSegment = { kind: "lit"; text: string } | ({ id: string } & BlankSpec);
@@ -19,7 +21,7 @@ export interface ClozeParse {
 
 const NUM_RE = /^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)\s*(?:(?:±|\+-|\+\/-)\s*((?:\d+(?:\.\d*)?|\.\d+))\s*(%)?)?\s*$/i;
 
-function parseBlank(body: string, n: number, errors: string[]): BlankSpec | null {
+function parseBlank(body: string, n: number, errors: string[], chips: boolean): BlankSpec | null {
   const colon = body.indexOf(":");
   const kind = (colon === -1 ? body : body.slice(0, colon)).trim().toLowerCase();
   const rest = colon === -1 ? "" : body.slice(colon + 1);
@@ -64,11 +66,28 @@ function parseBlank(body: string, n: number, errors: string[]): BlankSpec | null
     return { kind: "select", options, correct: correct[0] };
   }
 
-  errors.push(`${label}: unknown blank type “${kind}”. Use text, num or select.`);
+  if (kind === "chip") {
+    if (!chips) {
+      errors.push(`${label}: drag-in chips only work in fill-in-the-blank questions.`);
+      return null;
+    }
+    const answer = rest.trim();
+    if (!answer) {
+      errors.push(`${label}: write the chip that belongs here, e.g. {{chip:Paris}}.`);
+      return null;
+    }
+    if (answer.includes("|")) {
+      errors.push(`${label}: a chip blank has one answer; put wrong chips under “Extra chips”.`);
+      return null;
+    }
+    return { kind: "chip", answer };
+  }
+
+  errors.push(`${label}: unknown blank type “${kind}”. Use text, num, select${chips ? " or chip" : ""}.`);
   return null;
 }
 
-export function parseCloze(template: string, opts: { allowNoBlanks?: boolean } = {}): ClozeParse {
+export function parseCloze(template: string, opts: { allowNoBlanks?: boolean; allowChips?: boolean } = {}): ClozeParse {
   const segments: ClozeSegment[] = [];
   const blanks: ClozeParse["blanks"] = [];
   const errors: string[] = [];
@@ -85,7 +104,7 @@ export function parseCloze(template: string, opts: { allowNoBlanks?: boolean } =
         break;
       }
       blankCount++;
-      const spec = parseBlank(template.slice(i + 2, end), blankCount, errors);
+      const spec = parseBlank(template.slice(i + 2, end), blankCount, errors, opts.allowChips ?? false);
       if (text) segments.push({ kind: "lit", text });
       text = "";
       if (spec) {

@@ -11,12 +11,19 @@ import { Input } from "@/components/ui/input";
 import { Notice } from "@/components/ui/notice";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Explain } from "@/components/ui/explain";
+import { UndoButtons } from "@/components/ui/undo-buttons";
 import type { AttemptPoolItem } from "@/engine/attempt";
 import { estimateOdds } from "@/engine/authoring/simulate";
+import { estimateSecondsById } from "@/engine/authoring/estimate";
+import { findSimilarQuestions, similarityIssues } from "@/engine/authoring/similar-questions";
 import { summarizeBlueprint } from "@/engine/authoring/summary";
 import { RELEASE_LABELS, type ExamSettings } from "@/engine/exam";
 import { checkBlueprint } from "@/engine/selection/check";
+import { bloomCoverage } from "@/engine/tags";
+import { blueprintTopics } from "@/engine/selection/types";
 import { questionLabel } from "@/lib/question-label";
+import { useUndoable } from "@/lib/use-undoable";
 import { BlueprintEditor } from "./blueprint-editor";
 import { PoolTable } from "./pool-table";
 import { SamplePanel } from "./sample-panel";
@@ -40,7 +47,8 @@ export function ExamBuilder({
 
   const [title, setTitle] = useState(exam.title);
   const [description, setDescription] = useState(exam.description);
-  const [blueprint, setBlueprint] = useState(exam.blueprint);
+  const blueprintHistory = useUndoable(exam.blueprint);
+  const { value: blueprint, set: setBlueprint } = blueprintHistory;
   const [settings, setSettings] = useState(exam.settings);
 
   const locked = exam.state !== "draft";
@@ -81,15 +89,18 @@ export function ExamBuilder({
     () => Object.fromEntries(pool.map((q) => [q.id, questionLabel(q.def, 80)])),
     [pool],
   );
-  const usedTopics = useMemo(() => new Set(blueprint.sections.map((s) => s.topicId)), [blueprint]);
+  const usedTopics = useMemo(() => new Set(blueprintTopics(blueprint)), [blueprint]);
   const drawablePool = useMemo(() => pool.filter((q) => usedTopics.has(q.topicId)), [pool, usedTopics]);
 
-  const summary = summarizeBlueprint(blueprint, pool, topicNames);
-  const issues = checkBlueprint(blueprint, pool, topicNames);
+  const secondsById = useMemo(() => estimateSecondsById(pool), [pool]);
+  const summary = summarizeBlueprint(blueprint, pool, topicNames, secondsById);
+  const similar = useMemo(() => similarityIssues(findSimilarQuestions(blueprint, pool), questionNames), [blueprint, pool, questionNames]);
+  const issues = [...checkBlueprint(blueprint, pool, topicNames), ...similar];
 
   // The odds run the real selector 1,000 times; defer so typing stays snappy.
   const deferredBlueprint = useDeferredValue(blueprint);
   const odds = useMemo(() => estimateOdds(deferredBlueprint, pool, 1000), [deferredBlueprint, pool]);
+  const bloom = useMemo(() => bloomCoverage(pool, odds), [pool, odds]);
 
   const setSetting = <K extends keyof ExamSettings>(key: K, value: ExamSettings[K]) =>
     setSettings((s) => ({ ...s, [key]: value }));
@@ -138,13 +149,29 @@ export function ExamBuilder({
         <h2 className="mb-2 text-sm font-medium text-muted-foreground">What each student gets</h2>
         <div className="grid gap-1 text-base text-pretty">
           {summary.sentences.map((s, i) => (
-            <p key={i}>{s}</p>
+            <p key={i}>
+              {summary.explain[i] ? <Explain explanation={summary.explain[i]}>{s}</Explain> : s}
+            </p>
           ))}
           {settings.timeLimitMinutes !== null && <p>They have {settings.timeLimitMinutes} minutes.</p>}
+          {bloom.sentence && <p className="text-sm text-muted-foreground">Bloom levels. {bloom.sentence}</p>}
         </div>
       </section>
 
-      <BuilderSection title="Blueprint" hint="How many questions to draw from each topic. Every student gets their own random draw.">
+      <BuilderSection
+        title="Blueprint"
+        hint="How many questions to draw from each topic. Every student gets their own random draw."
+        actions={
+          !locked && (
+            <UndoButtons
+              canUndo={blueprintHistory.canUndo}
+              canRedo={blueprintHistory.canRedo}
+              onUndo={blueprintHistory.undo}
+              onRedo={blueprintHistory.redo}
+            />
+          )
+        }
+      >
         <BlueprintEditor blueprint={blueprint} onChange={setBlueprint} topics={topics} pool={pool} disabled={locked} />
         <IssueList issues={issues} empty={blueprint.sections.length ? "Every section has enough questions." : undefined} />
       </BuilderSection>
@@ -199,6 +226,72 @@ export function ExamBuilder({
                 One-way: no going back to earlier questions
               </label>
             </div>
+            <Field label="Time per question (seconds, optional)" hint="Each question locks when its time is up and the next one opens. Implies one-way. Extra-time multipliers apply.">
+              <Input
+                type="number"
+                min={10}
+                max={3600}
+                placeholder="No limit"
+                value={settings.questionTimeLimitSeconds ?? ""}
+                onChange={(e) => setSetting("questionTimeLimitSeconds", e.target.value === "" ? null : Math.max(10, Math.min(3600, Math.floor(Number(e.target.value)) || 10)))}
+              />
+            </Field>
+          </div>
+          <div className="grid gap-3 sm:col-span-2">
+            <Field label="Question order" hint="Adaptive: each next question depends on the last answer, one at a time and one way. The blueprint's topics are the pool.">
+              <Select
+                value={settings.adaptive ? settings.adaptive.rule : "fixed"}
+                onChange={(e) =>
+                  setSetting(
+                    "adaptive",
+                    e.target.value === "fixed"
+                      ? null
+                      : { rule: e.target.value as "staircase" | "rasch", length: settings.adaptive?.length ?? Math.max(1, summary.questionCount || 10), threshold: settings.adaptive?.threshold ?? 0.5 },
+                  )
+                }
+              >
+                <option value="fixed">Fixed: everyone&apos;s draw is made at the start</option>
+                <option value="staircase">Adaptive: one level harder after a right answer, easier after a wrong one</option>
+                <option value="rasch">Adaptive: Rasch ability estimate (picks the question nearest each student&apos;s level)</option>
+              </Select>
+            </Field>
+            {settings.adaptive && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Questions per student">
+                  <Input type="number" min={1} max={200} value={settings.adaptive.length} onChange={(e) => settings.adaptive && setSetting("adaptive", { ...settings.adaptive, length: Math.max(1, Math.min(200, Math.floor(Number(e.target.value)) || 1)) })} />
+                </Field>
+                <Field label="Counts as right at (% of points)" hint="Partial credit at or above this moves the student up.">
+                  <Input type="number" min={1} max={100} value={Math.round(settings.adaptive.threshold * 100)} onChange={(e) => settings.adaptive && setSetting("adaptive", { ...settings.adaptive, threshold: Math.max(1, Math.min(100, Number(e.target.value) || 50)) / 100 })} />
+                </Field>
+              </div>
+            )}
+            <Field label="When time runs out" hint="The exam window closing always ends every attempt.">
+              <Select
+                value={settings.late.mode}
+                onChange={(e) =>
+                  setSetting("late", e.target.value === "accept" ? { mode: "accept", windowMinutes: 10, penaltyPercentPerMinute: 2, maxPenaltyPercent: 20 } : { mode: "reject" })
+                }
+              >
+                <option value="reject">Submit automatically</option>
+                <option value="accept">Allow late work, with a penalty</option>
+              </Select>
+            </Field>
+            {settings.late.mode === "accept" && (
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label="Late window (minutes)">
+                  <Input type="number" min={1} max={1440} value={settings.late.windowMinutes} onChange={(e) => settings.late.mode === "accept" && setSetting("late", { ...settings.late, windowMinutes: Math.max(1, Math.min(1440, Math.floor(Number(e.target.value)) || 1)) })} />
+                </Field>
+                <Field label="Penalty per minute (%)">
+                  <Input type="number" min={0} max={100} step="any" value={settings.late.penaltyPercentPerMinute} onChange={(e) => settings.late.mode === "accept" && setSetting("late", { ...settings.late, penaltyPercentPerMinute: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} />
+                </Field>
+                <Field label="Largest penalty (%)">
+                  <Input type="number" min={0} max={100} step="any" value={settings.late.maxPenaltyPercent} onChange={(e) => settings.late.mode === "accept" && setSetting("late", { ...settings.late, maxPenaltyPercent: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} />
+                </Field>
+                <p className="text-xs text-muted-foreground sm:col-span-3">
+                  {`e.g. 5 minutes late loses ${Math.min(settings.late.maxPenaltyPercent, 5 * settings.late.penaltyPercentPerMinute)}% of the points earned. Students see the working on their result.`}
+                </p>
+              </div>
+            )}
           </div>
         </fieldset>
       </BuilderSection>
@@ -215,12 +308,25 @@ export function ExamBuilder({
   );
 }
 
-function BuilderSection({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function BuilderSection({
+  title,
+  hint,
+  actions,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <section className="grid gap-3">
-      <div>
-        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
-        {hint ? <p className="mt-0.5 max-w-prose text-sm text-muted-foreground">{hint}</p> : null}
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+          {hint ? <p className="mt-0.5 max-w-prose text-sm text-muted-foreground">{hint}</p> : null}
+        </div>
+        {actions}
       </div>
       {children}
     </section>

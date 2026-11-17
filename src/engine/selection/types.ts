@@ -14,15 +14,31 @@ export interface PoolItem {
   conflictsWith?: readonly string[];
 }
 
-export const blueprintSectionSchema = z.object({
-  topicId: z.string(),
-  count: z.number().int().min(1),
-  /**
-   * Optional exact count per difficulty level, e.g. { "1": 2, "3": 1 }.
-   * Must add up to `count`.
-   */
-  difficultyMix: z.record(z.string(), z.number().int().min(0)).optional(),
+const topicLimitSchema = z.object({
+  min: z.number().int().min(0).optional(),
+  max: z.number().int().min(0).optional(),
 });
+
+export const blueprintSectionSchema = z
+  .object({
+    topicId: z.string(),
+    /** More topics drawn in the same lottery as `topicId` ("5 from Genetics or Ecology"). */
+    extraTopicIds: z.array(z.string()).optional(),
+    count: z.number().int().min(1),
+    /**
+     * Optional exact count per difficulty level, e.g. { "1": 2, "3": 1 }.
+     * Must add up to `count`.
+     */
+    difficultyMix: z.record(z.string(), z.number().int().min(0)).optional(),
+    /** Per-topic minimum/maximum within the section, e.g. { genetics: { min: 2 } }. */
+    limits: z.record(z.string(), topicLimitSchema).optional(),
+  })
+  .refine((s) => !(s.limits && s.difficultyMix), {
+    message: "A section can control the difficulty mix or per-topic limits, not both.",
+    path: ["limits"],
+  });
+
+export type TopicLimit = z.infer<typeof topicLimitSchema>;
 
 export const blueprintSchema = z.object({
   sections: z.array(blueprintSectionSchema),
@@ -31,6 +47,16 @@ export const blueprintSchema = z.object({
 
 export type BlueprintSection = z.infer<typeof blueprintSectionSchema>;
 export type Blueprint = z.infer<typeof blueprintSchema>;
+
+/** Every topic a section draws from, main topic first, without repeats. */
+export function sectionTopics(section: Pick<BlueprintSection, "topicId" | "extraTopicIds">): string[] {
+  return [...new Set([section.topicId, ...(section.extraTopicIds ?? [])])];
+}
+
+/** Every topic the blueprint draws from, in section order. */
+export function blueprintTopics(blueprint: Pick<Blueprint, "sections">): string[] {
+  return [...new Set(blueprint.sections.flatMap(sectionTopics))];
+}
 
 export interface SelectionPick {
   questionId: string;
@@ -41,6 +67,10 @@ export interface SelectionPick {
   candidates: number;
   /** Chance a single draw from this bucket would land on it (weight share). */
   weightShare: number;
+  /** Multi-topic sections only: the topic it came from. */
+  topicId?: string;
+  /** Sections with limits only: taken to meet a topic's minimum, or on rank. */
+  via?: "minimum" | "rank";
 }
 
 export interface SelectionSkip {

@@ -4,6 +4,7 @@ import { Printer } from "lucide-react";
 import { GradeLines } from "@/components/authoring/grade-lines";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { fmtDuration } from "@/engine/dwell";
 import { fmtNum } from "@/engine/grading/format";
 import type { GradeLine } from "@/engine/types";
 import { getQuestionTypeUi } from "@/question-types/ui-registry";
@@ -26,6 +27,10 @@ export interface AttemptViewItem {
   overrideReason: string | null;
   /** Variable values this student's version was generated with. */
   vars: Record<string, string | number | boolean>;
+  /** Approximate time on screen, from the event log (null for older attempts). */
+  seconds?: number | null;
+  /** Adaptive attempts: why this question was chosen at this step. */
+  why?: string | null;
 }
 
 export interface AttemptViewProps {
@@ -42,6 +47,9 @@ export interface AttemptViewProps {
   /** Scores can be changed once the student has finished. */
   canOverride: boolean;
   items: AttemptViewItem[];
+  /** One of many on a print page: no buttons, and a page break after it. */
+  printMode?: boolean;
+  latePenalty?: { explanation: string; points: number } | null;
 }
 
 /**
@@ -50,15 +58,17 @@ export interface AttemptViewProps {
  */
 export function AttemptView(p: AttemptViewProps) {
   return (
-    <div className="grid gap-8">
+    <div className={p.printMode ? "grid gap-8 break-after-page" : "grid gap-8"}>
       <header className="grid gap-2">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">{p.student}</h1>
           <Badge>{p.state.replace("_", " ")}</Badge>
           {p.isPreview && <Badge tone="brand">Preview</Badge>}
-          <Button variant="outline" size="sm" className="ml-auto print:hidden" onClick={() => window.print()}>
-            <Printer /> Print / save as PDF
-          </Button>
+          {!p.printMode && (
+            <Button variant="outline" size="sm" className="ml-auto print:hidden" onClick={() => window.print()}>
+              <Printer /> Print / save as PDF
+            </Button>
+          )}
         </div>
         <p className="text-sm text-muted-foreground">
           {p.examTitle} · seed <code className="font-mono">{p.seed}</code>
@@ -68,6 +78,7 @@ export function AttemptView(p: AttemptViewProps) {
             {fmtNum(p.score)} / {fmtNum(p.maxScore ?? 0)}
           </p>
         )}
+        {p.latePenalty && <p className="text-sm text-warning">{p.latePenalty.explanation}</p>}
         {Object.keys(p.signals).length > 0 && (
           <p className="text-xs text-muted-foreground">
             Signals (never enforced): {Object.entries(p.signals).map(([k, n]) => `${n} ${k}`).join(", ")}
@@ -116,13 +127,15 @@ export function AttemptView(p: AttemptViewProps) {
             <li key={it.id} className="grid gap-4 rounded-lg border p-5 print:break-inside-avoid">
               <div className="flex items-center gap-2">
                 <Badge>Question {it.position + 1}</Badge>
+                {it.seconds != null && <span className="text-xs text-muted-foreground" title="Time on screen, from the event log; tab switches and idle time left out">about {fmtDuration(it.seconds)}</span>}
                 {it.gradedBy === "user" && <Badge tone="brand">{it.overrideReason ? "score changed by hand" : "marked by hand"}</Badge>}
-                {p.canOverride && it.score !== null && it.max !== null && (
+                {p.canOverride && !p.printMode && it.score !== null && it.max !== null && (
                   <span className="ml-auto">
                     <OverrideScore attemptItemId={it.id} position={it.position} score={it.score} max={it.max} />
                   </span>
                 )}
               </div>
+              {it.why && <p className="-mt-2 text-xs text-muted-foreground">Why this question: {it.why}</p>}
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <h3 className="mb-1 text-xs font-medium text-muted-foreground">Student&apos;s answer</h3>

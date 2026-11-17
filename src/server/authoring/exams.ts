@@ -1,16 +1,18 @@
 import "server-only";
-import { and, count, eq, isNull } from "drizzle-orm";
+import { and, count, countDistinct, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
-import { attempts, courses, exams, topics } from "@/db/schema";
+import { attempts, courses, exams, questions, topics } from "@/db/schema";
 import { finalizeMany } from "@/server/attempts/take";
 import { canTeach, scopeFor } from "@/server/access";
 import { getOrg } from "@/server/admin/org";
 import { preflightExam, type PreflightReport } from "@/engine/authoring/preflight";
 import { canTransition, type ExamStateName } from "@/engine/exam-state";
 import { examSettingsSchema } from "@/engine/exam";
-import { blueprintSchema } from "@/engine/selection/types";
+import { applyTemplate, templateById } from "@/engine/exam-templates";
+import { blueprintSchema, blueprintTopics } from "@/engine/selection/types";
 import { questionLabel } from "@/lib/question-label";
+import { ensureTypesReady } from "@/question-types/registry";
 import type { CurrentUser } from "@/server/auth";
 import { writeAudit } from "./audit";
 import { getExam, loadPool, topicNames } from "./data";
@@ -26,7 +28,7 @@ export const examInputSchema = z.object({
 
 export async function createExam(
   user: CurrentUser,
-  input: { courseId: string; title: string },
+  input: { courseId: string; title: string; template?: string },
 ): Promise<ActionResult<{ id: string }>> {
   const title = input.title.trim();
   if (!title) return { ok: false, error: "Give the exam a title." };
@@ -38,19 +40,33 @@ export async function createExam(
     .limit(1);
   if (!course || !canTeach(scope, course.id)) return { ok: false, error: "Choose one of your courses." };
 
+  const template = templateById(input.template);
+  const { settings, blueprint } = applyTemplate(
+    template,
+    (await getOrg(user.orgId)).settings.defaults,
+    template.perTopic > 0 ? await drawableByTopic(course.id) : [],
+  );
   const [row] = await db
     .insert(exams)
-    .values({
-      orgId: user.orgId,
-      courseId: course.id,
-      title,
-      blueprint: { sections: [], shuffleQuestions: true },
-      settings: examSettingsSchema.parse((await getOrg(user.orgId)).settings.defaults),
-      createdBy: user.id,
-    })
+    .values({ orgId: user.orgId, courseId: course.id, title, blueprint, settings, createdBy: user.id })
     .returning({ id: exams.id });
-  await writeAudit({ orgId: user.orgId, actorId: user.id, action: "exam.create", entityType: "exam", entityId: row.id, after: { title } });
+  await writeAudit({ orgId: user.orgId, actorId: user.id, action: "exam.create", entityType: "exam", entityId: row.id, after: { title, template: template.id } });
   return { ok: true, id: row.id };
+}
+
+/** Each topic in the course, in order, with how many questions an exam could draw (variant groups count once). */
+async function drawableByTopic(courseId: string) {
+  const rows = await db
+    .select({
+      id: topics.id,
+      drawable: countDistinct(sql`case when ${questions.status} = 'active' and ${questions.weight} > 0 then coalesce(${questions.groupKey}, ${questions.id}::text) end`),
+    })
+    .from(topics)
+    .leftJoin(questions, eq(questions.topicId, topics.id))
+    .where(eq(topics.courseId, courseId))
+    .groupBy(topics.id, topics.position)
+    .orderBy(topics.position);
+  return rows.map((r) => ({ id: r.id, drawable: Number(r.drawable) }));
 }
 
 async function courseTopicIds(courseId: string) {
@@ -84,7 +100,7 @@ export async function saveExam(user: CurrentUser, raw: unknown): Promise<ActionR
   }
 
   const known = await courseTopicIds(exam.courseId);
-  if (input.blueprint.sections.some((s) => !known.has(s.topicId))) {
+  if (blueprintTopics(input.blueprint).some((t) => !known.has(t))) {
     return { ok: false, error: "A section uses a topic that isn't in this course." };
   }
 
@@ -115,10 +131,11 @@ export async function runPreflight(user: CurrentUser, examId: string) {
 }
 
 export async function preflightFor(exam: Pick<typeof exams.$inferSelect, "orgId" | "courseId" | "blueprint" | "settings">) {
+  await ensureTypesReady();
   const blueprint = blueprintSchema.parse(exam.blueprint);
   const settings = examSettingsSchema.parse(exam.settings);
   const pool = await loadPool(exam.orgId, exam.courseId);
-  const names = await topicNames(exam.orgId, [...new Set(blueprint.sections.map((s) => s.topicId))]);
+  const names = await topicNames(exam.orgId, blueprintTopics(blueprint));
   const report: PreflightReport = preflightExam({
     blueprint,
     settings,
@@ -143,7 +160,7 @@ export async function publishExam(user: CurrentUser, examId: string): Promise<Ac
     return { ok: false, error: "Pre-flight found problems that must be fixed first." };
   }
 
-  const topicIds = new Set(blueprint.sections.map((s) => s.topicId));
+  const topicIds = new Set(blueprintTopics(blueprint));
   const lockedVersions = Object.fromEntries(
     pool.filter((q) => topicIds.has(q.topicId) && q.weight > 0).map((q) => [q.id, q.versionId]),
   );

@@ -1,8 +1,9 @@
 import { type AttemptPoolItem, buildAttempt } from "../attempt";
+import { expectedKeyScore } from "../grading/expect";
 import { roundScore } from "../grading/format";
 import { createRng } from "../rng";
 import { BlueprintError, selectQuestions } from "../selection/select";
-import type { Blueprint, PoolItem } from "../selection/types";
+import { type Blueprint, blueprintTopics, type PoolItem } from "../selection/types";
 import { getQuestionType } from "@/question-types/registry";
 
 export interface OddsResult {
@@ -101,8 +102,8 @@ export function simulate(
       score += type.grade(item.instance, response, { points: item.points }).score;
       max += item.points;
     }
-    for (const section of blueprint.sections) {
-      (topicCounts[section.topicId] ??= []).push(perTopic[section.topicId] ?? 0);
+    for (const topic of blueprintTopics(blueprint)) {
+      (topicCounts[topic] ??= []).push(perTopic[topic] ?? 0);
     }
     percents.push(max === 0 ? 0 : (score / max) * 100);
   }
@@ -139,9 +140,20 @@ export function simulate(
 export interface KeyCheckFailure {
   seed: string;
   questionId: string;
-  kind: "perfect" | "blank";
+  /** perfect: key short of full marks; blank: not 0; wrong: a wrong answer earned points. */
+  kind: "perfect" | "blank" | "wrong";
   score: number;
   expected: number;
+}
+
+export interface WrongRunSummary {
+  /** Lowest and highest whole-exam total of the all-wrong student. */
+  min: number;
+  max: number;
+  /** The exam's points, for "−1.5 of 20". */
+  outOf: number;
+  /** Questions where a wrong answer lost points (negative marking), by id. */
+  penalized: string[];
 }
 
 export interface KeyCheckResult {
@@ -150,12 +162,15 @@ export interface KeyCheckResult {
   buildFailures: number;
   firstBuildFailure: string | null;
   failures: KeyCheckFailure[];
+  /** null when no run could be built. */
+  wrong: WrongRunSummary | null;
 }
 
 /**
  * "Take it as a perfect student": answer every question with its own key and
- * require full marks; submit blanks and require zero. Any miss means a broken
- * answer key or grader.
+ * require full marks; submit blanks and require zero; answer everything wrong
+ * and require nothing earned (below zero only through negative marking). Any
+ * miss means a broken answer key or grader.
  */
 export function checkKeys(
   blueprint: Blueprint,
@@ -165,6 +180,11 @@ export function checkKeys(
   const failures: KeyCheckFailure[] = [];
   let buildFailures = 0;
   let firstBuildFailure: string | null = null;
+  let built = 0;
+  let wrongMin = Infinity;
+  let wrongMax = -Infinity;
+  let wrongOutOf = 0;
+  const penalized = new Set<string>();
 
   for (let i = 0; i < runs; i++) {
     const seed = `perfect:${i}`;
@@ -177,18 +197,36 @@ export function checkKeys(
       firstBuildFailure ??= e.message;
       continue;
     }
+    let wrongTotal = 0;
+    let outOf = 0;
     for (const item of items) {
+      outOf += item.points;
       const type = getQuestionType(item.type);
       const perfect = type.grade(item.instance, type.keyResponse(item.instance), { points: item.points });
-      // Human-graded types can't be checked by machine; blank must still score 0.
-      if (!type.manual && perfect.score !== item.points) {
-        failures.push({ seed, questionId: item.questionId, kind: "perfect", score: perfect.score, expected: item.points });
+      // Hand-marked lines can't be checked by machine; everything else must be full marks.
+      const expected = expectedKeyScore(perfect, item.points);
+      if (perfect.score !== expected) {
+        failures.push({ seed, questionId: item.questionId, kind: "perfect", score: perfect.score, expected });
       }
       const blank = type.grade(item.instance, null, { points: item.points });
       if (blank.score !== 0) {
         failures.push({ seed, questionId: item.questionId, kind: "blank", score: blank.score, expected: 0 });
       }
+      const answer = type.wrongResponse?.(item.instance) ?? null;
+      if (answer !== null) {
+        const w = type.grade(item.instance, answer, { points: item.points });
+        if (w.score > 0) failures.push({ seed, questionId: item.questionId, kind: "wrong", score: w.score, expected: 0 });
+        if (w.score < 0) penalized.add(item.questionId);
+        wrongTotal += w.score;
+      }
     }
+    wrongTotal = roundScore(wrongTotal);
+    wrongMin = Math.min(wrongMin, wrongTotal);
+    wrongMax = Math.max(wrongMax, wrongTotal);
+    wrongOutOf = Math.max(wrongOutOf, outOf);
+    built++;
   }
-  return { runs, buildFailures, firstBuildFailure, failures };
+  const wrong: WrongRunSummary | null =
+    built === 0 ? null : { min: wrongMin, max: wrongMax, outOf: wrongOutOf, penalized: [...penalized].sort() };
+  return { runs, buildFailures, firstBuildFailure, failures, wrong };
 }

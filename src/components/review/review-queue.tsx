@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { saveReviewAction } from "@/app/teach/actions";
 import { Button } from "@/components/ui/button";
 import { fmtNum } from "@/engine/grading/format";
-import { keywordHits, wordCount } from "@/question-types/long-answer/core";
+import { Prose } from "@/components/ui/prose";
+import { getQuestionTypeUi } from "@/question-types/ui-registry";
 import type { ReviewItem } from "@/server/review";
 
 function Highlighted({ text, keywords }: { text: string; keywords: string[] }) {
@@ -41,9 +42,10 @@ export function ReviewQueue({ items }: { items: ReviewItem[] }) {
   const [error, setError] = useState<string | null>(null);
   const item = items[index];
 
-  const hits = useMemo(() => (item ? keywordHits(item.text, item.instance.keywords) : null), [item]);
-  const total = item ? item.instance.rubric.reduce((s, c) => s + c.points, 0) || 1 : 1;
-  const awarded = item ? item.instance.rubric.filter((c) => ticked.includes(c.id)).reduce((s, c) => s + (item.points * c.points) / total, 0) : 0;
+  const awarded = useMemo(
+    () => (item ? item.autoPoints + item.criteria.filter((c) => ticked.includes(c.id)).reduce((s, c) => s + c.points, 0) : 0),
+    [item, ticked],
+  );
 
   const advance = () => {
     setTicked([]);
@@ -66,8 +68,8 @@ export function ReviewQueue({ items }: { items: ReviewItem[] }) {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest("input, textarea, select")) return;
       const n = Number(e.key);
-      if (n >= 1 && n <= item.instance.rubric.length) {
-        const id = item.instance.rubric[n - 1].id;
+      if (n >= 1 && n <= item.criteria.length) {
+        const id = item.criteria[n - 1].id;
         setTicked((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]));
       } else if (e.key === "Enter" && !pending) {
         save();
@@ -89,26 +91,25 @@ export function ReviewQueue({ items }: { items: ReviewItem[] }) {
       <p className="text-sm text-muted-foreground">
         {item.label} · answer {index + 1} of {items.length}
       </p>
-      <p className="font-medium">{item.instance.stem}</p>
+      <Prose className="font-medium">{item.stem}</Prose>
 
-      <article className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-4 text-sm leading-relaxed" aria-label="Student answer">
-        <Highlighted text={item.text} keywords={item.instance.keywords} />
-      </article>
-      <p className="text-xs text-muted-foreground">
-        {wordCount(item.text)} words
-        {item.instance.maxWords ? ` (limit ${item.instance.maxWords})` : ""}
-        {hits && item.instance.keywords.length > 0 && (
-          <>
-            {" "}
-            · keywords found: {hits.found.length ? hits.found.join(", ") : "none"}
-            {hits.missing.length > 0 && <> · not found: {hits.missing.join(", ")}</>}
-          </>
-        )}
-      </p>
+      {item.aids.text !== undefined ? (
+        <article className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-4 text-sm leading-relaxed" aria-label="Student answer">
+          <Highlighted text={item.aids.text} keywords={item.aids.keywords ?? []} />
+        </article>
+      ) : (
+        <section aria-label="Student answer" className="rounded-lg border bg-muted/30 p-4">
+          <AnswerView type={item.type} redacted={item.redacted} response={item.response} />
+        </section>
+      )}
+      {item.aids.notes.length > 0 && <p className="text-xs text-muted-foreground">{item.aids.notes.join(" · ")}</p>}
+      {item.autoPoints > 0 && (
+        <p className="text-xs text-muted-foreground">{fmtNum(Math.round(item.autoPoints * 100) / 100)} points already marked automatically on this question.</p>
+      )}
 
       <fieldset className="grid gap-2">
         <legend className="mb-1 text-sm font-medium">Rubric</legend>
-        {item.instance.rubric.map((c, i) => (
+        {item.criteria.map((c, i) => (
           <label key={c.id} className="flex items-start gap-3 rounded-md border px-3 py-2 text-sm has-[:checked]:border-foreground has-[:checked]:bg-muted">
             <input
               type="checkbox"
@@ -118,7 +119,7 @@ export function ReviewQueue({ items }: { items: ReviewItem[] }) {
             />
             <span className="flex-1">{c.text}</span>
             <kbd className="rounded border px-1.5 text-xs text-muted-foreground">{i + 1}</kbd>
-            <span className="w-14 text-right text-xs text-muted-foreground tabular-nums">{fmtNum(Math.round(((item.points * c.points) / total) * 100) / 100)} pt</span>
+            <span className="w-14 text-right text-xs text-muted-foreground tabular-nums">{fmtNum(Math.round(c.points * 100) / 100)} pt</span>
           </label>
         ))}
       </fieldset>
@@ -139,4 +140,10 @@ export function ReviewQueue({ items }: { items: ReviewItem[] }) {
       ) : null}
     </div>
   );
+}
+
+/** The answer through the question type's own renderer, read-only (drawings, passages...). */
+function AnswerView({ type, redacted, response }: { type: string; redacted: unknown; response: unknown }) {
+  const { Renderer } = getQuestionTypeUi(type);
+  return <Renderer instance={redacted} value={response} readOnly />;
 }

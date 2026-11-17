@@ -1,6 +1,7 @@
 // Every registered question type must pass this suite. Adding a type means
 // adding fixtures for it in fixtures.ts; nothing here should need to change.
 import { describe, expect, it } from "vitest";
+import { expectedKeyScore, keyNeedsReview } from "@/engine/grading/expect";
 import { sumPoints } from "@/engine/grading/format";
 import { createRng } from "@/engine/rng";
 import { fixturesByType } from "./fixtures";
@@ -15,6 +16,13 @@ describe.each([...questionTypes.values()])("$id contract", (type) => {
 
   it("has fixtures", () => {
     expect(fixtures.length).toBeGreaterThan(0);
+  });
+
+  it("offers a wrong-answer run and a time estimate", () => {
+    // Hand-marked types can't be "wrong" by machine; everything else must say how.
+    if (!type.manual) expect(type.wrongResponse).toBeTypeOf("function");
+    expect(type.estimateSeconds).toBeTypeOf("function");
+    for (const f of fixtures) expect(type.estimateSeconds!(type.defSchema.parse(f))).toBeGreaterThan(0);
   });
 
   describe.each(fixtures.map((f, i) => [i, f] as const))("fixture %i", (_i, fixture) => {
@@ -41,17 +49,26 @@ describe.each([...questionTypes.values()])("$id contract", (type) => {
         const best = type.grade(frozen, key, { points: POINTS });
         expect(best.max).toBe(POINTS);
         expect(sumPoints(best.lines)).toBe(best.score);
-        if (type.manual) {
-          // A human awards the points; the machine only flags the answer.
-          expect(best.needsReview).toBe(true);
-          expect(best.score).toBe(0);
-        } else {
-          expect(best.score).toBe(POINTS);
-        }
+        // Every point a machine can award, it must award; hand-marked lines
+        // ("review") wait for a person and flag the answer.
+        expect(best.score).toBe(expectedKeyScore(best, POINTS));
+        expect(best.needsReview).toBe(keyNeedsReview(best));
+        if (type.manual) expect(best.score).toBe(0);
 
         const blank = type.grade(frozen, null, { points: POINTS });
         expect(blank.score).toBe(0);
         expect(blank.lines.every((l) => l.verdict === "unanswered")).toBe(true);
+
+        const wrong = type.wrongResponse?.(frozen) ?? null;
+        if (wrong !== null) {
+          type.responseSchema.parse(wrong);
+          const w = type.grade(frozen, wrong, { points: POINTS });
+          // Nothing earned; below zero only through the question's own penalties.
+          expect(w.score).toBeLessThanOrEqual(0);
+          expect(w.score).toBeGreaterThanOrEqual(-POINTS);
+          expect(w.lines.some((l) => l.verdict === "correct" || l.verdict === "partial")).toBe(false);
+          expect(sumPoints(w.lines)).toBe(w.score);
+        }
 
         const random = type.randomResponse(frozen, createRng(`${seed}:answer`));
         type.responseSchema.parse(random);
@@ -63,6 +80,36 @@ describe.each([...questionTypes.values()])("$id contract", (type) => {
       // Generous: the spreadsheet type evaluates a HyperFormula sheet per grade, which
       // takes several seconds over 1,000 seeds when the suite runs in parallel.
     }, 60_000);
+
+    it.runIf(type.review !== undefined)("marks by hand: every criterion ticked on the key is full marks", () => {
+      for (let s = 0; s < 50; s++) {
+        const { instance } = type.generate(def, createRng(`review:${s}`));
+        const POINTS = POINT_VALUES[s % POINT_VALUES.length];
+        const criteria = type.review!.criteria(instance, POINTS);
+        if (criteria.length === 0) continue; // e.g. a passage with no hand-marked part
+        const all = type.review!.mark(instance, type.keyResponse(instance), criteria.map((c) => c.id), { points: POINTS });
+        expect(all.score).toBe(POINTS);
+        expect(all.needsReview).toBe(false);
+        expect(sumPoints(all.lines)).toBe(all.score);
+        const none = type.review!.mark(instance, type.keyResponse(instance), [], { points: POINTS });
+        expect(none.score).toBeLessThan(POINTS);
+        expect(sumPoints(none.lines)).toBe(none.score);
+      }
+    });
+
+    it.runIf(type.analysisTokens !== undefined)("analysis tokens come from its universe, and the key's tokens are the keyed ones", () => {
+      for (let s = 0; s < 50; s++) {
+        const { instance } = type.generate(def, createRng(`tokens:${s}`));
+        const u = type.tokenUniverse!(instance);
+        const ids = new Set(u.tokens.map((t) => t.id));
+        const keyed = type.analysisTokens!(instance, type.keyResponse(instance));
+        expect(keyed.every((t) => ids.has(t))).toBe(true);
+        expect(u.key.every((k) => ids.has(k))).toBe(true);
+        expect([...keyed].sort()).toEqual([...u.key].sort());
+        const random = type.analysisTokens!(instance, type.randomResponse(instance, createRng(`tokens:${s}:r`)));
+        expect(random.every((t) => ids.has(t))).toBe(true);
+      }
+    });
 
     it("redacts the answer key", () => {
       const { instance } = type.generate(def, createRng("redact"));

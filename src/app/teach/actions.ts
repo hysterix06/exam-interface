@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { ExamStateName } from "@/engine/exam-state";
 import { requireStaff } from "@/server/access";
+import { listAssets, uploadAsset } from "@/server/assets";
 import { createCodes } from "@/server/attempts/codes";
+import { readSolutionWorkbook } from "@/server/attempts/upload";
 import { startPreviewAttempt } from "@/server/attempts/start";
 import { createExam, publishExam, saveExam, setExamState, unpublishExam } from "@/server/authoring/exams";
 import { restoreVersion, saveQuestion } from "@/server/authoring/questions";
@@ -26,7 +28,7 @@ const done = <T extends { ok: boolean }>(r: T) => {
 
 // Exams
 
-export async function createExamAction(input: { courseId: string; title: string }) {
+export async function createExamAction(input: { courseId: string; title: string; template?: string }) {
   const { user } = await requireStaff();
   if (!id.safeParse(input.courseId).success) return { ok: false as const, error: "Choose one of your courses." };
   return done(await createExam(user, input));
@@ -144,4 +146,32 @@ export async function renameTopicAction(input: { id: string; name: string }) {
 export async function deleteTopicAction(topicId: string) {
   const { user } = await requireStaff();
   return done(await deleteTopic(user, topicId));
+}
+
+/** Upload an image or workbook to a course (FormData: courseId, file). */
+export async function uploadAssetAction(form: FormData) {
+  const { user } = await requireStaff();
+  const courseId = form.get("courseId");
+  const file = form.get("file");
+  if (typeof courseId !== "string" || !id.safeParse(courseId).success) return { ok: false as const, error: "Choose one of your courses." };
+  if (!(file instanceof File)) return { ok: false as const, error: "Choose a file." };
+  return uploadAsset(user, courseId, file);
+}
+
+export async function listAssetsAction(courseId: string, kind?: string) {
+  const { user } = await requireStaff();
+  if (!id.safeParse(courseId).success) return [];
+  return listAssets(user, courseId, kind === "image" || kind === "workbook" ? kind : undefined);
+}
+
+/** Read a model-solution workbook into cells (FormData: file, rows, cols, sheetName). Nothing is stored. */
+export async function readSolutionWorkbookAction(form: FormData) {
+  await requireStaff();
+  const file = form.get("file");
+  const rows = Number(form.get("rows"));
+  const cols = Number(form.get("cols"));
+  if (!(file instanceof File)) return { ok: false as const, error: "Choose a file." };
+  if (!Number.isInteger(rows) || !Number.isInteger(cols) || rows < 1 || cols < 1 || rows > 30 || cols > 12) return { ok: false as const, error: "Set the area first." };
+  const sheetName = form.get("sheetName");
+  return readSolutionWorkbook(file, { rows, cols, sheetName: typeof sheetName === "string" && sheetName ? sheetName : undefined });
 }

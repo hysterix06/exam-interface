@@ -14,6 +14,8 @@ export default async function globalSetup() {
     await sql`delete from attempts where exam_id = ${exam.id}`;
     await sql`delete from extensions where exam_id = ${exam.id}`;
     await sql`update exams set state = 'open', opens_at = null, closes_at = null where id = ${exam.id}`;
+    // The showcase exams allow a few attempts each; start every run fresh.
+    await sql`delete from attempts where exam_id in (select id from exams where title in ('BIO 101 Field Skills Check (open)', 'BIO 101 Lab Skills Check (open)'))`;
   } finally {
     await sql.end();
   }

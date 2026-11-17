@@ -158,3 +158,34 @@ describe("instanceFeedback", () => {
     expect(instanceFeedback(null)).toBeUndefined();
   });
 });
+
+describe("per-question time and the late window", async () => {
+  const { effectiveItemTime, hardDeadline, itemDeadline } = await import("./deadline");
+  const { reapplyPenalty } = await import("./late");
+  const { isSequential, examSettingsSchema } = await import("../exam");
+
+  it("scales question time by the multiplier only", () => {
+    expect(effectiveItemTime(null)).toBeNull();
+    expect(effectiveItemTime(60, [{ kind: "multiplier", value: 1.5 }, { kind: "minutes", value: 10 }])).toEqual({ seconds: 90, explanation: "60 s × 1.5 = 90 s per question" });
+    expect(effectiveItemTime(45)?.explanation).toBe("45 s per question");
+  });
+
+  it("works out item and hard deadlines", () => {
+    const t = new Date("2026-01-01T10:00:00Z");
+    expect(itemDeadline(t, 30)?.toISOString()).toBe("2026-01-01T10:00:30.000Z");
+    expect(itemDeadline(null, 30)).toBeNull();
+    expect(hardDeadline(t, 15)?.toISOString()).toBe("2026-01-01T10:15:00.000Z");
+    expect(hardDeadline(null, 15)).toBeNull();
+  });
+
+  it("re-applies a late penalty to a changed total", () => {
+    expect(reapplyPenalty({ minutes: 5, percent: 10, points: 1, explanation: "" }, 20)).toMatchObject({ points: 2, explanation: "Submitted 5 minutes late: 10% of the 20 points earned, so 2 points off." });
+  });
+
+  it("treats one-way and timed questions as sequential", () => {
+    const s = examSettingsSchema.parse({});
+    expect(isSequential(s)).toBe(false);
+    expect(isSequential({ ...s, oneWayNavigation: true })).toBe(true);
+    expect(isSequential({ ...s, questionTimeLimitSeconds: 60 })).toBe(true);
+  });
+});

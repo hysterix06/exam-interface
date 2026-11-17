@@ -231,6 +231,19 @@ export const attempts = pgTable(
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     score: doublePrecision("score"),
     maxScore: doublePrecision("max_score"),
+    // Sequential attempts (one-way, per-question time limits, adaptive): the
+    // position the student is on. The server only hands out items up to it and
+    // only accepts saves to it. Null = free navigation.
+    cursor: integer("cursor"),
+    // Minutes past deadline_at the attempt stays open under the exam's late policy.
+    lateWindowMinutes: integer("late_window_minutes").notNull().default(0),
+    // The deduction applied for submitting late (LatePenalty), or null.
+    latePenalty: jsonb("late_penalty"),
+    // Last save, at most every 20 s: drives "last seen" and Realtime on the live board.
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    // Adaptive attempts: the rules and item difficulties frozen at start, so the
+    // path can be replayed exactly even if the exam is recalibrated later.
+    plan: jsonb("plan"),
     updatedAt: updatedAt(),
   },
   (t) => [
@@ -263,6 +276,12 @@ export const attemptItems = pgTable(
     position: integer("position").notNull(),
     instance: jsonb("instance").notNull(),
     flagged: boolean("flagged").notNull().default(false),
+    // When the student first reached it (sequential attempts, time per question).
+    openedAt: timestamp("opened_at", { withTimezone: true }),
+    // When it stopped taking answers (moved on, or its own time ran out).
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    // Adaptive attempts: why this item was picked at this step (the trace shown to staff).
+    selection: jsonb("selection"),
   },
   (t) => [
     unique("attempt_items_attempt_position_uq").on(t.attemptId, t.position),
@@ -352,4 +371,32 @@ export const extensions = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("extensions_user_idx").on(t.userId), index("extensions_exam_idx").on(t.examId)],
+);
+
+// Uploaded files (images for hotspot/diagram/passage questions, starter
+// workbooks). The bytes live in a private Supabase Storage bucket; questions
+// refer to an asset by id, never by URL, so generated instances stay
+// deterministic and access is checked on every request (/assets/[id]).
+export const assets = pgTable(
+  "assets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: orgId(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id),
+    /** image | workbook */
+    kind: text("kind").notNull(),
+    /** Path inside the bucket. */
+    path: text("path").notNull(),
+    fileName: text("file_name").notNull(),
+    mime: text("mime").notNull(),
+    bytes: integer("bytes").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    sha256: text("sha256").notNull(),
+    createdBy: uuid("created_by").references(() => profiles.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index("assets_course_idx").on(t.courseId), uniqueIndex("assets_course_sha_uq").on(t.courseId, t.sha256)],
 );

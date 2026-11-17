@@ -53,3 +53,13 @@ describe("long answer", () => {
     expect(longAnswer.validateDef(longAnswer.defSchema.parse({ stem: "x", rubric: [] })).map((i) => i.code)).toContain("long-answer.no-rubric");
   });
 });
+
+describe("long-answer review hook", () => {
+  it("marks exactly like gradeRubric and lists aids", async () => {
+    const { gradeRubric } = await import("./core");
+    const inst = longAnswer.generate(longAnswer.defSchema.parse({ stem: "Explain", rubric: [{ id: "a", text: "A", points: 1 }, { id: "b", text: "B", points: 3 }], keywords: ["cell"], maxWords: 100 }), createRng("x")).instance;
+    expect(longAnswer.review!.mark(inst, { text: "x" }, ["b", "zz"], { points: 2 })).toEqual(gradeRubric(inst, ["b"], 2));
+    expect(longAnswer.review!.criteria(inst, 2).map((c) => c.points)).toEqual([0.5, 1.5]);
+    expect(longAnswer.review!.aids!(inst, { text: "the cell divides" }).notes).toEqual(["3 words (limit 100)", "Keywords found: cell"]);
+  });
+});

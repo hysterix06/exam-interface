@@ -4,7 +4,7 @@ import { db } from "@/db/client";
 import { attemptItems, attempts, exams, grades, questions, questionVersions, responses } from "@/db/schema";
 import { type RegradeDiff, regradeItems } from "@/engine/regrade";
 import { questionLabel } from "@/lib/question-label";
-import { getQuestionType } from "@/question-types/registry";
+import { ensureTypesReady, getQuestionType } from "@/question-types/registry";
 import { type Scope, scopeFor } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
 import { getExam } from "@/server/authoring/data";
@@ -49,6 +49,7 @@ export async function listRegradable(scope: Scope, examId: string) {
 type Reader = Pick<typeof db, "select">;
 
 async function gather(reader: Reader, scope: Scope, examId: string, questionId: string, targetVersion: number) {
+  await ensureTypesReady();
   if (!(await getExam(scope, examId))) return null;
   const [target] = await reader
     .select()
@@ -67,6 +68,7 @@ async function gather(reader: Reader, scope: Scope, examId: string, questionId: 
       seedVersionId: attemptItems.seedVersionId,
       currentVersionId: attemptItems.questionVersionId,
       overrideReason: grades.overrideReason,
+      gradedBy: grades.gradedBy,
       response: responses.response,
       max: grades.max,
       oldScore: grades.score,
@@ -87,10 +89,11 @@ async function gather(reader: Reader, scope: Scope, examId: string, questionId: 
       ),
     );
 
-  // A score a person changed by hand stays as they set it; the preview says so.
-  const kept = rows.filter((r) => r.overrideReason !== null).map((r) => ({ attemptId: r.attemptId, score: r.oldScore ?? 0 }));
+  // A score a person set or marked by hand stays as they left it; the preview says so.
+  const byHand = (r: (typeof rows)[number]) => r.overrideReason !== null || r.gradedBy === "user";
+  const kept = rows.filter(byHand).map((r) => ({ attemptId: r.attemptId, score: r.oldScore ?? 0 }));
   const diffs = regradeItems(
-    rows.filter((r) => r.overrideReason === null).map((r) => ({
+    rows.filter((r) => !byHand(r)).map((r) => ({
       itemId: r.itemId,
       attemptId: r.attemptId,
       attemptSeed: r.attemptSeed,

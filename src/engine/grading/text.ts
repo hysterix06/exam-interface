@@ -39,3 +39,6 @@ export function compileRegex(pattern: string, caseSensitive: boolean) {
     return null;
   }
 }
+
+/** A typed answer no sensible key accepts, for the wrong-answer run. */
+export const WRONG_TEXT = "zz-not-the-answer-zz";

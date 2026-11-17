@@ -60,6 +60,16 @@ export const dropdown = defineQuestionType<DropdownDef, DropdownInstance, Dropdo
     return { selected: rng.pick(inst.options).id };
   },
 
+  wrongResponse(inst) {
+    const wrong = inst.options.find((o) => o.id !== inst.answer);
+    return wrong ? { selected: wrong.id } : null;
+  },
+
+  estimateSeconds: () => 30,
+
+  analysisTokens: (_inst, r) => (r.selected ? [r.selected] : []),
+  tokenUniverse: (inst) => ({ tokens: inst.options, key: [inst.answer], options: true }),
+
   validateDef(def) {
     const issues: PreflightIssue[] = [];
     if (!def.stem.trim()) {

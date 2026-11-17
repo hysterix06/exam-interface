@@ -1,3 +1,4 @@
+import { generateQuestion, resolveDef } from "../generate";
 import { createRng } from "../rng";
 import { getQuestionType } from "@/question-types/registry";
 
@@ -22,10 +23,10 @@ export type VariantResult =
 export function exploreVariants(typeId: string, def: unknown, count = 20): VariantResult {
   try {
     const type = getQuestionType(typeId);
-    const parsed = type.defSchema.parse(def);
+    resolveDef(type, def); // a malformed definition fails once, up front
     const rows = Array.from({ length: count }, (_, i): VariantRow => {
       const seed = `variant:${i + 1}`;
-      const { instance, vars } = type.generate(parsed, createRng(seed));
+      const { instance, vars } = generateQuestion(type, def, createRng(seed));
       return { seed, vars, instance, key: type.keyResponse(instance) };
     });
     return { ok: true, rows, distinct: new Set(rows.map((r) => JSON.stringify(r.instance))).size };

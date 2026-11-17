@@ -36,6 +36,27 @@
       "when": 1794837226722,
       "tag": "20261116135346_attempt_item_seed_version",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794879798667,
+      "tag": "20261117014318_assets",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794879799125,
+      "tag": "20261117014319_storage_buckets",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794881913552,
+      "tag": "20261117021833_attempt_flow",
+      "breakpoints": true
     }
   ]
 }

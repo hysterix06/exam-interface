@@ -1,4 +1,6 @@
 "use client";
+import { withFormatHint } from "../hints";
+import { Prose } from "@/components/ui/prose";
 import { useId } from "react";
 
 import { Field } from "@/components/ui/field";
@@ -25,12 +27,15 @@ export const dropdownUi: QuestionTypeUi<DropdownDef, StudentInstance, DropdownRe
     const set = (patch: Partial<DropdownDef>) => onChange({ ...def, ...patch });
     return (
       <div className="grid gap-5">
-        <Field label="Question">
+        <Field label="Question" hint={withFormatHint("What the student reads above the dropdown, e.g. “Where does translation take place?”")}>
           <Textarea value={def.stem} onChange={(e) => set({ stem: e.target.value })} />
         </Field>
         <div className="grid gap-2">
           <span className="text-sm font-medium">Options</span>
-          <p className="text-xs text-muted-foreground">Select the one correct option.</p>
+          <p className="text-xs text-muted-foreground">
+            Mark the one correct option. A dropdown suits long lists (countries, years); for three or four short
+            choices, multiple choice is easier to read.
+          </p>
           <OptionRows
             options={def.options}
             onChange={(options) => set({ options })}
@@ -56,6 +61,7 @@ export const dropdownUi: QuestionTypeUi<DropdownDef, StudentInstance, DropdownRe
           />
           Shuffle options for each student
         </label>
+        <p className="-mt-3 text-xs text-muted-foreground">Leave off when the order means something, such as years or a scale.</p>
       </div>
     );
   },
@@ -64,7 +70,7 @@ export const dropdownUi: QuestionTypeUi<DropdownDef, StudentInstance, DropdownRe
     const stemId = useId();
     return (
       <div className="grid gap-4">
-        <p id={stemId} className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <Prose id={stemId} className="text-base">{instance.stem}</Prose>
         <Select
           aria-label="Your answer"
           aria-describedby={stemId}

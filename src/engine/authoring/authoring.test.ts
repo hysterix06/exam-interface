@@ -3,6 +3,7 @@ import { fixturesByType } from "@/question-types/fixtures";
 import type { AttemptPoolItem } from "../attempt";
 import { examSettingsSchema } from "../exam";
 import type { Blueprint } from "../selection/types";
+import { estimateSecondsById } from "./estimate";
 import { preflightExam } from "./preflight";
 import { checkKeys, estimateOdds, oddsOf, simulate } from "./simulate";
 import { summarizeBlueprint } from "./summary";
@@ -40,6 +41,9 @@ describe("examSettingsSchema", () => {
       requireCode: false,
       oneWayNavigation: false,
       release: "score",
+      questionTimeLimitSeconds: null,
+      late: { mode: "reject" },
+      adaptive: null,
     });
   });
 });
@@ -141,6 +145,19 @@ describe("simulate", () => {
     expect(r.scores!.median).toBeCloseTo((r.scores!.min + r.scores!.max) / 2);
   });
 
+  it("adds a rule-of-thumb time estimate when given one", () => {
+    const secondsById = estimateSecondsById(POOL);
+    // mcq fixture: 30 s + 8 s per option, times the difficulty factor.
+    const options = (mcq as { options: unknown[] }).options.length;
+    expect(secondsById.b2).toBe(30 + 8 * options);
+    expect(secondsById.b3).toBe((30 + 8 * options) * 0.75);
+    expect(secondsById.b4).toBe((30 + 8 * options) * 1.5);
+    const s = summarizeBlueprint(BLUEPRINT, POOL, NAMES, secondsById);
+    expect(s.estimatedMinutes).toBeGreaterThan(0);
+    expect(s.sentences).toContain(`Estimated time about ${s.estimatedMinutes} min for a typical student (a rule of thumb per question type and difficulty).`);
+    expect(summarizeBlueprint(BLUEPRINT, POOL, NAMES).estimatedMinutes).toBeNull();
+  });
+
   it("rethrows unexpected errors", () => {
     expect(() => simulate({ sections: [{ topicId: "bio", count: 1 }], shuffleQuestions: true }, [q("x", "bio", { type: "nope" })], 1)).toThrow(/Unknown question type/);
   });
@@ -158,14 +175,59 @@ describe("checkKeys", () => {
     expect(r.firstBuildFailure).toBeTruthy();
   });
 
+  it("runs an all-wrong student: zero without penalties", () => {
+    const lenient = { ...(mcq as object), penalty: 0 };
+    const pool = POOL.map((p) => ({ ...p, def: lenient }));
+    const r = checkKeys(BLUEPRINT, pool, 5);
+    expect(r.wrong).toEqual({ min: 0, max: 0, outOf: 8, penalized: [] });
+  });
+
+  it("reports negative marking in the wrong run", () => {
+    const harsh = { ...(mcq as object), multiple: false, penalty: 0.5 };
+    const pool = [q("p1", "bio", { def: harsh }), q("p2", "bio", { def: { ...(mcq as object), penalty: 0 } })];
+    const r = checkKeys({ sections: [{ topicId: "bio", count: 2 }], shuffleQuestions: true }, pool, 3);
+    expect(r.failures).toEqual([]);
+    expect(r.wrong).toEqual({ min: -1, max: -1, outOf: 4, penalized: ["p1"] });
+  });
+
+  it("flags a key that accepts a wrong answer", () => {
+    const anything = { stem: "Say anything", match: { kind: "regex", pattern: ".*", example: "hi", caseSensitive: false } };
+    const pool = [q("r1", "bio", { type: "short-answer", def: anything })];
+    const r = checkKeys({ sections: [{ topicId: "bio", count: 1 }], shuffleQuestions: true }, pool, 2);
+    expect(r.failures.map((f) => f.kind)).toEqual(["wrong", "wrong"]);
+    const report = preflightExam({ blueprint: { sections: [{ topicId: "bio", count: 1 }], shuffleQuestions: true }, settings: SETTINGS, pool }, { generations: 2, keyRuns: 2 });
+    expect(report.items.find((i) => i.id === "perfect")?.problems[0]).toMatch(/deliberately wrong answer scored 2/);
+  });
+
   it("rethrows unexpected errors", () => {
     expect(() => checkKeys({ sections: [{ topicId: "bio", count: 1 }], shuffleQuestions: true }, [q("x", "bio", { type: "nope" })], 1)).toThrow();
   });
 });
 
+// The same pool with genuinely different questions, so "near-identical" stays quiet.
+const SUBJECTS = ["mitosis", "osmosis", "ribosomes", "alleles", "meiosis", "codons", "plasmids"];
+const DISTINCT_POOL = POOL.map((p, i) => ({
+  ...p,
+  def: {
+    ...(mcq as object),
+    stem: `Explain ${SUBJECTS[i]} in your own words, question ${i}.`,
+    options: [
+      { id: "a", text: `${SUBJECTS[i]} right`, correct: true },
+      { id: "b", text: `${SUBJECTS[(i + 3) % 7]} wrong ${i}`, correct: false },
+    ],
+  },
+}));
+
 describe("preflightExam", () => {
   const run = (over: Partial<Parameters<typeof preflightExam>[0]> = {}) =>
-    preflightExam({ blueprint: BLUEPRINT, settings: SETTINGS, pool: POOL, topicNames: NAMES, ...over }, { generations: 20, keyRuns: 20 });
+    preflightExam({ blueprint: BLUEPRINT, settings: SETTINGS, pool: DISTINCT_POOL, topicNames: NAMES, ...over }, { generations: 20, keyRuns: 20 });
+
+  it("warns about near-identical questions in the pools item", () => {
+    const r = run({ pool: POOL });
+    const pools = r.items.find((i) => i.id === "pools")!;
+    expect(pools.status).toBe("warn");
+    expect(pools.problems.some((p) => /the same text/.test(p))).toBe(true);
+  });
 
   it("passes a healthy exam with every item green", () => {
     const r = run();
@@ -199,6 +261,14 @@ describe("preflightExam", () => {
   it("flags malformed definitions", () => {
     const r = run({ pool: [q("b1", "bio", { def: { nonsense: true } }), ...POOL.slice(1)] });
     expect(r.items.find((i) => i.id === "keys")!.problems[0]).toMatch(/incomplete or malformed/);
+  });
+
+  it("warns when the time estimate is close to the limit", () => {
+    const r = run({ settings: examSettingsSchema.parse({ timeLimitMinutes: 1 }) });
+    const time = r.items.find((i) => i.id === "time")!;
+    expect(time.status).toBe("warn");
+    expect(time.problems[0]).toMatch(/more than 90% of the limit/);
+    expect(run().items.find((i) => i.id === "time")!.status).toBe("pass");
   });
 
   it("warns, rather than blocks, for no time limit and unequal points", () => {
@@ -237,5 +307,17 @@ describe("exploreVariants", () => {
     expect(exploreVariants("mcq", { nope: 1 }).ok).toBe(false);
     expect(exploreVariants("nope", {})).toMatchObject({ ok: false });
     expect(exploreVariants("mcq", 5)).toMatchObject({ ok: false });
+  });
+});
+
+describe("multi-topic sections in the summary", () => {
+  it("names every topic and the limits", () => {
+    const bp: Blueprint = { sections: [{ topicId: "bio", extraTopicIds: ["gen"], count: 4, limits: { gen: { min: 1, max: 2 } } }], shuffleQuestions: false };
+    const s = summarizeBlueprint(bp, POOL, NAMES);
+    expect(s.sentences[0]).toBe("Each student gets 4 questions: 4 from Cell Biology or Genetics (at least 1 from Genetics, at most 2 from Genetics).");
+    const sim = simulate(bp, POOL, 20);
+    expect(Object.keys(sim.topicBalance).sort()).toEqual(["bio", "gen"]);
+    expect(sim.topicBalance.gen.min).toBeGreaterThanOrEqual(1);
+    expect(sim.topicBalance.gen.max).toBeLessThanOrEqual(2);
   });
 });

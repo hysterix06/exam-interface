@@ -33,4 +33,16 @@ export const numericFixtures: NumericDef[] = [
     answer: "cost * (1 + tax / 100)",
     tolerance: { rel: 0.01 },
   },
+  {
+    stem: "A {m} kg trolley accelerates at {a} m/s². What force acts on it? Give 3 significant figures.",
+    variables: [
+      { kind: "float", name: "m", min: 1.5, max: 9.5, decimals: 2 },
+      { kind: "float", name: "a", min: 0.5, max: 3, decimals: 2 },
+    ],
+    constraints: [],
+    answer: "m * a",
+    tolerance: {},
+    units: ["N"],
+    sigFigs: { count: 3, weight: 0.25 },
+  },
 ];

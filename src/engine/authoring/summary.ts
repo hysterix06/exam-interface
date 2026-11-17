@@ -1,6 +1,7 @@
-import { fmtNum } from "../grading/format";
+import { fmtNum, orList } from "../grading/format";
 import type { Names } from "../selection/check";
-import type { Blueprint, PoolItem } from "../selection/types";
+import { type Blueprint, type PoolItem, sectionTopics } from "../selection/types";
+import type { Explanation } from "../types";
 
 export const DIFFICULTY_LABELS: Record<number, string> = { 1: "easy", 2: "medium", 3: "hard" };
 
@@ -14,8 +15,15 @@ export interface BlueprintSummary {
   pointsMax: number;
   /** True when some section lacks enough questions, so the points are partial. */
   incomplete: boolean;
+  /**
+   * Expected minutes for a typical student (rule of thumb, rounded to whole
+   * minutes); null when no estimates were given.
+   */
+  estimatedMinutes: number | null;
   /** Plain-language sentences, in reading order. */
   sentences: string[];
+  /** Working behind each sentence's number, aligned with `sentences` (null = nothing to explain). */
+  explain: (Explanation | null)[];
 }
 
 function sum(xs: number[]) {
@@ -41,6 +49,8 @@ export function summarizeBlueprint(
   blueprint: Blueprint,
   pool: readonly PoolItem[],
   topicNames: Names = {},
+  /** Estimated seconds per question id (see estimate.ts); omit to skip the time sentence. */
+  secondsById?: Readonly<Record<string, number>>,
 ): BlueprintSummary {
   if (blueprint.sections.length === 0) {
     return {
@@ -48,7 +58,9 @@ export function summarizeBlueprint(
       pointsMin: 0,
       pointsMax: 0,
       incomplete: false,
+      estimatedMinutes: null,
       sentences: ["No sections yet. Add a section to choose how many questions come from a topic."],
+      explain: [null],
     };
   }
 
@@ -56,12 +68,17 @@ export function summarizeBlueprint(
   let pointsMin = 0;
   let pointsMax = 0;
   let incomplete = false;
+  let seconds = 0;
   const parts: string[] = [];
+  const pointInputs: Explanation["inputs"] = [];
+  const timeInputs: Explanation["inputs"] = [];
 
   for (const section of blueprint.sections) {
     questionCount += section.count;
-    const topic = topicNames[section.topicId] ?? "an unknown topic";
-    const drawable = pool.filter((q) => q.topicId === section.topicId && q.weight > 0);
+    const ids = sectionTopics(section);
+    const nameOf = (t: string) => topicNames[t] ?? "an unknown topic";
+    const topic = orList(ids.map(nameOf));
+    const drawable = pool.filter((q) => ids.includes(q.topicId) && q.weight > 0);
 
     let mix = "";
     let ranges: ({ min: number; max: number } | null)[];
@@ -78,19 +95,42 @@ export function summarizeBlueprint(
       ranges = [extremes(drawable.map((q) => q.points), section.count)];
     }
 
+    const limits = Object.entries(section.limits ?? {})
+      .flatMap(([t, l]) => [
+        l.min ? `at least ${l.min} from ${nameOf(t)}` : null,
+        l.max !== undefined ? `at most ${l.max} from ${nameOf(t)}` : null,
+      ])
+      .filter(Boolean);
+    if (limits.length) mix = ` (${limits.join(", ")})`;
     parts.push(`${section.count} from ${topic}${mix}`);
+    if (secondsById) {
+      const each = weightedMean(drawable, secondsById);
+      seconds += section.count * each;
+      timeInputs.push({ label: topic, value: `${section.count} × about ${fmtNum(Math.round(each))} s` });
+    }
+    let sMin = 0;
+    let sMax = 0;
+    let sIncomplete = false;
     for (const r of ranges) {
-      if (!r) incomplete = true;
+      if (!r) sIncomplete = true;
       else {
-        pointsMin += r.min;
-        pointsMax += r.max;
+        sMin += r.min;
+        sMax += r.max;
       }
     }
+    incomplete ||= sIncomplete;
+    pointsMin += sMin;
+    pointsMax += sMax;
+    pointInputs.push({
+      label: `${topic} (${section.count})`,
+      value: sIncomplete ? "not enough questions" : sMin === sMax ? `${fmtNum(sMin)} pts` : `${fmtNum(sMin)}–${fmtNum(sMax)} pts`,
+    });
   }
 
   const sentences = [
     `Each student gets ${questionCount} ${questionCount === 1 ? "question" : "questions"}: ${parts.join(", ")}.`,
   ];
+  const explain: (Explanation | null)[] = [null];
 
   const total =
     pointsMin === pointsMax
@@ -99,12 +139,36 @@ export function summarizeBlueprint(
   sentences.push(
     incomplete ? `${total} (Some sections don't have enough questions yet, so this is a partial count.)` : total,
   );
+  explain.push({
+    formula:
+      "For each section, add up the points of the questions it draws. When questions are worth different points, the range runs from the cheapest possible draw to the dearest.",
+    inputs: [...pointInputs, { label: "Total", value: pointsMin === pointsMax ? `${fmtNum(pointsMin)} pts` : `${fmtNum(pointsMin)}–${fmtNum(pointsMax)} pts` }],
+  });
+
+  const estimatedMinutes = secondsById && questionCount > 0 ? Math.max(1, Math.round(seconds / 60)) : null;
+  if (estimatedMinutes !== null) {
+    sentences.push(`Estimated time about ${estimatedMinutes} min for a typical student (a rule of thumb per question type and difficulty).`);
+    explain.push({
+      formula:
+        "Each question type has a rule of thumb (e.g. multiple choice: 30 s plus 8 s per option), times 0.75 for easy and 1.5 for hard. A section's figure is the average of the questions it can draw, weighted by how likely each is.",
+      inputs: [...timeInputs, { label: "Total", value: `about ${fmtNum(Math.round(seconds))} s ≈ ${estimatedMinutes} min` }],
+      note: "A planning aid, not a limit. Watch the first real attempts to calibrate.",
+    });
+  }
 
   sentences.push(
     blueprint.shuffleQuestions
       ? "Each student sees the questions in a different random order."
       : "Questions appear in section order for every student.",
   );
+  explain.push(null);
 
-  return { questionCount, pointsMin, pointsMax, incomplete, sentences };
+  return { questionCount, pointsMin, pointsMax, incomplete, estimatedMinutes, sentences, explain };
+}
+
+/** Average seconds of a question drawn from `items`, weighted by selection weight. */
+function weightedMean(items: readonly PoolItem[], secondsById: Readonly<Record<string, number>>) {
+  const total = sum(items.map((q) => q.weight));
+  if (total === 0) return 0;
+  return sum(items.map((q) => q.weight * (secondsById[q.id] ?? 60))) / total;
 }

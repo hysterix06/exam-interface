@@ -213,3 +213,69 @@ describe("explainSelection", () => {
     ]);
   });
 });
+
+describe("sections over several topics with limits", () => {
+  const mixed: Blueprint = {
+    sections: [{ topicId: "A", extraTopicIds: ["B"], count: 5, limits: { B: { min: 2 }, A: { max: 3 } } }],
+    shuffleQuestions: false,
+  };
+  const topicOf = (id: string) => POOL.find((q) => q.id === id)!.topicId;
+
+  it("draws from every listed topic and honours each minimum and maximum", () => {
+    for (let s = 0; s < 300; s++) {
+      const { questionIds, trace } = select(mixed, POOL, `lim${s}`);
+      expect(questionIds).toHaveLength(5);
+      const b = questionIds.filter((id) => topicOf(id) === "B").length;
+      const a = questionIds.filter((id) => topicOf(id) === "A").length;
+      expect(b).toBeGreaterThanOrEqual(2);
+      expect(a).toBeLessThanOrEqual(3);
+      expect(questionIds.every((id) => ["A", "B"].includes(topicOf(id)))).toBe(true);
+      // Minimums are taken first, then the rest by rank.
+      expect(trace.picks.filter((p) => p.via === "minimum").length).toBe(2);
+      expect(trace.picks.every((p) => p.topicId === topicOf(p.questionId))).toBe(true);
+    }
+  });
+
+  it("without limits, a multi-topic section is one lottery over the union", () => {
+    const union: Blueprint = { sections: [{ topicId: "B", extraTopicIds: ["C"], count: 9 }], shuffleQuestions: false };
+    const { questionIds, trace } = select(union, POOL, "u");
+    expect(new Set(questionIds)).toEqual(new Set([...POOL.filter((q) => q.topicId !== "A").map((q) => q.id)]));
+    expect(trace.picks.every((p) => p.via === undefined)).toBe(true);
+  });
+
+  it("leaves single-topic sections' trace exactly as before (no new fields)", () => {
+    const { trace } = select(BLUEPRINT, POOL, "s1");
+    for (const p of trace.picks) {
+      expect(p).not.toHaveProperty("via");
+      expect(p).not.toHaveProperty("topicId");
+    }
+  });
+
+  it("fails clearly when a minimum can't be met", () => {
+    const tooMany: Blueprint = { sections: [{ topicId: "A", extraTopicIds: ["C"], count: 6, limits: { C: { min: 5 } } }], shuffleQuestions: false };
+    expect(() => select(tooMany, POOL, "x")).toThrow(BlueprintError);
+    expect(() => select(tooMany, POOL, "x")).toThrow(/at least 5 from topic C/);
+  });
+
+  it("checks that limits can be met before anyone sits the exam", () => {
+    const issues = (bp: Blueprint) => checkBlueprint(bp, POOL, { A: "Alpha", B: "Beta", C: "Gamma" }).map((i) => i.code);
+    expect(issues(mixed)).toEqual([]);
+    expect(issues({ ...mixed, sections: [{ ...mixed.sections[0], limits: { B: { min: 6 } } }] })).toContain("blueprint.limit-min-too-big");
+    expect(issues({ ...mixed, sections: [{ ...mixed.sections[0], limits: { A: { min: 3 }, B: { min: 3 } } }] })).toContain("blueprint.limits-exceed-count");
+    expect(issues({ ...mixed, sections: [{ ...mixed.sections[0], limits: { A: { max: 1 }, B: { max: 1 } } }] })).toContain("blueprint.limits-below-count");
+    expect(issues({ ...mixed, sections: [{ ...mixed.sections[0], limits: { A: { min: 3, max: 2 } } }] })).toContain("blueprint.limit-min-above-max");
+    expect(issues({ ...mixed, sections: [{ ...mixed.sections[0], limits: { C: { min: 1 } } }] })).toContain("blueprint.limit-unknown-topic");
+    expect(issues({ sections: [{ topicId: "A", extraTopicIds: ["B"], count: 14 }], shuffleQuestions: true })).toContain("blueprint.pool-too-small");
+  });
+
+  it("explains which topic each pick came from and why", () => {
+    const { trace } = select(mixed, POOL, "e");
+    const lines = explainSelection(trace, mixed, { topics: { A: "Alpha", B: "Beta" } });
+    expect(lines.filter((l) => /from Beta; taken to meet its minimum/.test(l))).toHaveLength(2);
+  });
+
+  it("rejects limits combined with a difficulty mix", async () => {
+    const { blueprintSchema } = await import("./types");
+    expect(() => blueprintSchema.parse({ sections: [{ topicId: "A", count: 2, difficultyMix: { "2": 2 }, limits: { A: { min: 1 } } }] })).toThrow();
+  });
+});

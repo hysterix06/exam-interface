@@ -134,6 +134,7 @@ export async function loadPool(orgId: string, courseId: string): Promise<Attempt
       points: questionVersions.points,
       groupKey: questionVersions.groupKey,
       conflictsWith: questionVersions.conflictsWith,
+      tags: questionVersions.tags,
     })
     .from(questions)
     .innerJoin(topics, eq(topics.id, questions.topicId))

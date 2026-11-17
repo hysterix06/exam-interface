@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyseItems, chosenOptions, mean, MIN_SAMPLE, pearson, withDeadDistractors, type AnalysisAttempt } from "./analysis";
+import { analyseItems, explainItem, mean, MIN_SAMPLE, pearson, responseTokens, tokenUniverse, withDeadDistractors, type AnalysisAttempt } from "./analysis";
 
 describe("pearson", () => {
   it("matches hand-computed values", () => {
@@ -87,7 +87,7 @@ describe("analyseItems", () => {
   });
 });
 
-describe("withDeadDistractors / chosenOptions", () => {
+describe("withDeadDistractors / responseTokens", () => {
   const stat = analyseItems(DATA).find((s) => s.questionId === "Q2")!;
   it("names options nobody picked, ignoring the key", () => {
     const out = withDeadDistractors(stat, ["right", "wrongA", "wrongB", "wrongC"], ["right"]);
@@ -97,11 +97,26 @@ describe("withDeadDistractors / chosenOptions", () => {
     // With a single student there is nothing to conclude, so no flag.
     expect(withDeadDistractors({ ...stat, n: 1 }, ["right", "z"], ["right"])).toEqual({ ...stat, n: 1 });
   });
-  it("reads each choice type's response shape", () => {
-    expect(chosenOptions("mcq", { selected: ["a", "b"] })).toEqual(["a", "b"]);
-    expect(chosenOptions("dropdown", { selected: "c" })).toEqual(["c"]);
-    expect(chosenOptions("true-false", { value: false })).toEqual(["false"]);
-    expect(chosenOptions("short-answer", { text: "x" })).toBeNull();
-    expect(chosenOptions("mcq", null)).toBeNull();
+  it("reads each type's choices through its own hook", () => {
+    expect(responseTokens("mcq", {}, { selected: ["a", "b", "a"] })).toEqual(["a", "b"]);
+    expect(responseTokens("dropdown", {}, { selected: "c" })).toEqual(["c"]);
+    expect(responseTokens("true-false", {}, { value: false })).toEqual(["false"]);
+    expect(responseTokens("matching", {}, { matches: { l1: "r2", l2: "" } })).toEqual(["l1=r2"]);
+    expect(responseTokens("short-answer", {}, { text: "x" })).toBeNull();
+    expect(responseTokens("mcq", {}, null)).toBeNull();
+    expect(responseTokens("mcq", {}, { nonsense: 1 })).toBeNull();
+    expect(tokenUniverse("true-false", { stem: "", answer: true, penalty: 0 })).toMatchObject({ key: ["true"], options: true });
+    expect(tokenUniverse("short-answer", {})).toBeNull();
+  });
+});
+
+describe("explainItem", () => {
+  it("shows the working and warns about small samples", () => {
+    const e = explainItem({ n: 12, difficulty: 0.625, discrimination: 0.412 });
+    expect(e.difficulty.inputs[1].value).toBe("62.5%");
+    expect(e.discrimination.inputs[1].value).toBe("0.41");
+    expect(e.difficulty.note).toMatch(/Only 12 students/);
+    expect(explainItem({ n: 40, difficulty: 1, discrimination: null }).discrimination.inputs[1].value).toMatch(/n\/a/);
+    expect(explainItem({ n: 40, difficulty: 1, discrimination: null }).difficulty.note).toBeUndefined();
   });
 });

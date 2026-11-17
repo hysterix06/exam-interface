@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
 import { attemptItems, attempts, courses, exams, grades, profiles, questionVersions, responses } from "@/db/schema";
-import { gradeRubric, type LongAnswerInstance } from "@/question-types/long-answer/core";
+import type { ReviewAids, ReviewCriterion } from "@/engine/question-type";
 import { getQuestionType } from "@/question-types/registry";
 import type { CurrentUser } from "@/server/auth";
 import { writeAudit } from "@/server/authoring/audit";
@@ -37,8 +37,15 @@ export interface ReviewItem {
   attemptItemId: string;
   /** Stable per exam: "Student 3". Real names only when the grader asks. */
   label: string;
-  text: string;
-  instance: LongAnswerInstance;
+  type: string;
+  stem: string;
+  /** What the student saw (answer key removed) and what they answered, for the type's own renderer. */
+  redacted: unknown;
+  response: unknown;
+  criteria: ReviewCriterion[];
+  aids: ReviewAids;
+  /** Points already awarded by machine on the same question (a passage's auto-marked parts). */
+  autoPoints: number;
   points: number;
 }
 
@@ -58,6 +65,8 @@ export async function loadReviewQueue(scope: Scope, examId: string, questionId: 
       instance: attemptItems.instance,
       response: responses.response,
       max: grades.max,
+      type: questionVersions.type,
+      lines: grades.lines,
     })
     .from(grades)
     .innerJoin(attemptItems, eq(attemptItems.id, grades.attemptItemId))
@@ -96,14 +105,25 @@ export async function loadReviewQueue(scope: Scope, examId: string, questionId: 
   }
 
   const items: ReviewItem[] = pending
-    .filter((p) => p.questionId === current)
-    .map((p) => ({
-      attemptItemId: p.attemptItemId,
-      label: reveal ? (names.get(p.userId) ?? "Unknown") : `Student ${rank.get(p.attemptId)}`,
-      text: (p.response as { text?: string } | null)?.text ?? "",
-      instance: p.instance as LongAnswerInstance,
-      points: p.max,
-    }));
+    .filter((p) => p.questionId === current && getQuestionType(p.type).review)
+    .map((p) => {
+      const type = getQuestionType(p.type);
+      const parsed = p.response === null ? null : type.responseSchema.safeParse(p.response);
+      const response = parsed?.success ? parsed.data : null;
+      const lines = (p.lines ?? []) as GradeLine[];
+      return {
+        attemptItemId: p.attemptItemId,
+        label: reveal ? (names.get(p.userId) ?? "Unknown") : `Student ${rank.get(p.attemptId)}`,
+        type: p.type,
+        stem: (p.instance as { stem?: string }).stem ?? questionLabel(p.def, 200),
+        redacted: type.redact(p.instance),
+        response,
+        criteria: type.review!.criteria(p.instance, p.max),
+        aids: type.review!.aids?.(p.instance, response) ?? { notes: [] },
+        autoPoints: lines.filter((l) => l.verdict !== "review").reduce((s, l) => s + l.points, 0),
+        points: p.max,
+      };
+    });
 
   return { questions: questionsList, current, items };
 }
@@ -124,6 +144,7 @@ export async function saveReview(
         instance: attemptItems.instance,
         attemptId: attemptItems.attemptId,
         type: questionVersions.type,
+        response: responses.response,
         orgId: attempts.orgId,
         courseId: exams.courseId,
       })
@@ -132,16 +153,18 @@ export async function saveReview(
       .innerJoin(attempts, eq(attempts.id, attemptItems.attemptId))
       .innerJoin(exams, eq(exams.id, attempts.examId))
       .innerJoin(questionVersions, eq(questionVersions.id, attemptItems.questionVersionId))
+      .leftJoin(responses, eq(responses.attemptItemId, attemptItems.id))
       .where(eq(grades.attemptItemId, input.attemptItemId))
-      .for("update")
+      .for("update", { of: grades })
       .limit(1);
     if (!row || row.orgId !== user.orgId || !canTeach(scope, row.courseId)) return { ok: false as const, error: "That answer no longer exists." };
     if (!row.needsReview) return { ok: false as const, error: "That answer has already been marked." };
-    if (!getQuestionType(row.type).manual) return { ok: false as const, error: "That question is marked automatically." };
+    const type = getQuestionType(row.type);
+    if (!type.review) return { ok: false as const, error: "That question is marked automatically." };
 
-    const inst = row.instance as LongAnswerInstance;
-    const valid = new Set(inst.rubric.map((c) => c.id));
-    const result = gradeRubric(inst, input.ticked.filter((id) => valid.has(id)), row.max);
+    const valid = new Set(type.review.criteria(row.instance, row.max).map((c) => c.id));
+    const parsed = row.response === null ? null : type.responseSchema.safeParse(row.response);
+    const result = type.review.mark(row.instance, parsed?.success ? parsed.data : null, input.ticked.filter((id) => valid.has(id)), { points: row.max });
 
     await tx
       .update(grades)

@@ -13,6 +13,7 @@ export default async function ExamWorkspaceLayout({ children, params }: LayoutPr
 
   return (
     <>
+      <div className="print:hidden">
       <PageHeader
         back={{ href: "/teach/exams", label: "Exams" }}
         title={exam.title}
@@ -35,6 +36,7 @@ export default async function ExamWorkspaceLayout({ children, params }: LayoutPr
           { href: `${base}/results`, label: "Results", disabledReason: draft ? "Publish the exam first" : undefined },
         ]}
       />
+      </div>
       {children}
     </>
   );

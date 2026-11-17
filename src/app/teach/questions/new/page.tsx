@@ -5,6 +5,7 @@ import { TypePicker } from "@/components/authoring/type-picker";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
+import { examplesFor } from "@/question-types/examples";
 import { questionTypes } from "@/question-types/registry";
 import { requireStaff } from "@/server/access";
 import { listCourses, listTopics } from "@/server/authoring/data";
@@ -51,15 +52,17 @@ export default async function NewQuestionPage({ searchParams }: PageProps<"/teac
   }
 
   const topicId = topics.find((t) => t.id === first(sp.topic))?.id ?? topics[0].id;
+  const example = examplesFor(type.id)[Number(first(sp.example))];
 
   return (
     <>
       <PageHeader title={`New ${type.label.toLowerCase()} question`} back={{ href: `/teach/questions/new${first(sp.topic) ? `?topic=${first(sp.topic)}` : ""}`, label: "Choose another type" }} />
       <QuestionEditor
         typeId={type.id}
-        topics={topics.map((t) => ({ id: t.id, name: t.name, courseTitle: t.courseTitle }))}
+        topics={topics.map((t) => ({ id: t.id, name: t.name, courseId: t.courseId, courseTitle: t.courseTitle }))}
         initial={{
           topicId,
+          def: example?.def,
           weight: 1,
           difficulty: 2,
           points: 1,

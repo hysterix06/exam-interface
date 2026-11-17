@@ -1,5 +1,6 @@
 "use client";
 
+import { Prose } from "@/components/ui/prose";
 import { Plus, X } from "lucide-react";
 import { useId } from "react";
 import { Button } from "@/components/ui/button";
@@ -53,7 +54,7 @@ export function ChoiceList({
             disabled={readOnly}
             onChange={() => onToggle?.(o.id)}
           />
-          <span>{o.text}</span>
+          <Prose inline>{o.text}</Prose>
         </label>
       ))}
     </div>

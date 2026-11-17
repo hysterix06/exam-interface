@@ -1,6 +1,8 @@
 import Link from "next/link"
 import * as React from "react"
 import { cn } from "cn"
+import type { Explanation } from "@/engine/types"
+import { Explain } from "./explain"
 
 /** A labelled number. When it links, the number is how you get to the detail. */
 function Stat({
@@ -8,18 +10,23 @@ function Stat({
   value,
   hint,
   href,
+  explain,
   className,
 }: {
   label: string
   value: React.ReactNode
   hint?: React.ReactNode
   href?: string
+  /** Working behind the number, shown when it is clicked (not with `href`). */
+  explain?: Explanation | null
   className?: string
 }) {
   const body = (
     <>
       <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">{value}</dd>
+      <dd className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
+        {explain && !href ? <Explain explanation={explain}>{value}</Explain> : value}
+      </dd>
       {hint ? <dd className="mt-0.5 text-xs text-muted-foreground">{hint}</dd> : null}
     </>
   )

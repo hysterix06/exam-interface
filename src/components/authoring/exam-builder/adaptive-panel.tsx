@@ -16,8 +16,7 @@ type Pattern = keyof typeof PATTERNS;
 
 /**
  * Shows how adaptive difficulty stepping would walk through this exam's pool
- * for a pretend student. A preview of the rules only: live attempts still use
- * the normal fixed draw.
+ * for a pretend student, before anyone sits it.
  */
 export function AdaptivePanel({
   pool,

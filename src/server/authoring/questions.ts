@@ -6,7 +6,8 @@ import { db } from "@/db/client";
 import { questions, questionVersions, topics } from "@/db/schema";
 import { canTeach, scopeFor } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
-import { questionTypes } from "@/question-types/registry";
+import { joinDef, splitDef, validateQuestion } from "@/engine/generate";
+import { ensureTypesReady, questionTypes } from "@/question-types/registry";
 import { writeAudit } from "./audit";
 
 export type ActionResult<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -41,11 +42,15 @@ export async function saveQuestion(
 
   const type = questionTypes.get(q.type);
   if (!type) return { ok: false, error: `Unknown question type "${q.type}".` };
-  const def = type.defSchema.safeParse(q.def);
+  // The type's own definition, plus optional wording variants stored beside it.
+  const { def: own, textVars } = splitDef(q.def);
+  const def = type.defSchema.safeParse(own);
   if (!def.success) return { ok: false, error: "The question is incomplete or malformed." };
+  const stored = joinDef(def.data, textVars && { table: textVars.table, lists: textVars.lists.map((l) => ({ ...l, options: l.options.filter((o) => o.trim()) })) });
 
   if (q.status === "active") {
-    const blocking = type.validateDef(def.data).filter((i) => i.severity === "blocking");
+    await ensureTypesReady();
+    const blocking = validateQuestion(type, stored).filter((i) => i.severity === "blocking");
     if (blocking.length) {
       return { ok: false, error: `Can't activate yet: ${blocking.map((i) => i.message).join(" ")}` };
     }
@@ -61,7 +66,7 @@ export async function saveQuestion(
 
   const content = {
     type: q.type,
-    def: def.data,
+    def: stored,
     weight: q.weight,
     difficulty: q.difficulty,
     points: q.points,

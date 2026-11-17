@@ -1,5 +1,7 @@
 "use client";
 
+import { withFormatHint } from "../hints";
+import { Prose } from "@/components/ui/prose";
 import { useId } from "react";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -37,7 +39,7 @@ export const shortAnswerUi: QuestionTypeUi<ShortAnswerDef, StudentInstance, Shor
     const setMatch = (match: Match) => onChange({ ...def, match });
     return (
       <div className="grid gap-5">
-        <Field label="Question">
+        <Field label="Question" hint={withFormatHint()}>
           <Textarea value={def.stem} onChange={(e) => onChange({ ...def, stem: e.target.value })} />
         </Field>
 
@@ -139,7 +141,7 @@ export const shortAnswerUi: QuestionTypeUi<ShortAnswerDef, StudentInstance, Shor
     const stemId = useId();
     return (
       <div className="grid gap-4">
-        <p id={stemId} className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <Prose id={stemId} className="text-base">{instance.stem}</Prose>
         <Input
           aria-label="Your answer"
           aria-describedby={stemId}

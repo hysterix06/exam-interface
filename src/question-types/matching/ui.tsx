@@ -1,10 +1,12 @@
 "use client";
 
+import { withFormatHint } from "../hints";
+import { ChipBoard } from "@/components/dnd/chip-board";
+import { Prose } from "@/components/ui/prose";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { nextOptionId } from "../choice-ui";
 import type { QuestionTypeUi } from "../ui-types";
@@ -28,7 +30,7 @@ export const matchingUi: QuestionTypeUi<MatchingDef, StudentInstance, MatchingRe
       set({ pairs: def.pairs.map((p) => (p.id === id ? { ...p, ...patch } : p)) });
     return (
       <div className="grid gap-5">
-        <Field label="Question">
+        <Field label="Question" hint={withFormatHint()}>
           <Textarea value={def.stem} onChange={(e) => set({ stem: e.target.value })} />
         </Field>
 
@@ -64,33 +66,18 @@ export const matchingUi: QuestionTypeUi<MatchingDef, StudentInstance, MatchingRe
 
   Renderer({ instance, value, onChange, readOnly }) {
     const matches = value?.matches ?? {};
+    // Board model: which left slot each right-hand chip sits in.
+    const placement = Object.fromEntries(Object.entries(matches).filter(([, r]) => r).map(([l, r]) => [r, l]));
     return (
       <div className="grid gap-4">
-        <p className="whitespace-pre-wrap text-base">{instance.stem}</p>
-        <ul className="grid gap-2">
-          {instance.lefts.map((l) => (
-            <li key={l.id} className="grid items-center gap-2 text-sm sm:grid-cols-[1fr_1fr]">
-              <span>{l.text}</span>
-              <Select
-                // aria-label, not an id reference: ids would repeat when several matching
-                // questions share a page (variants table, results).
-                aria-label={`Match for ${l.text.trim() || "this item"}`}
-                value={matches[l.id] ?? ""}
-                disabled={readOnly}
-                onChange={(e) => onChange?.({ matches: { ...matches, [l.id]: e.target.value } })}
-              >
-                <option value="" disabled>
-                  Choose a match…
-                </option>
-                {instance.rights.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.text}
-                  </option>
-                ))}
-              </Select>
-            </li>
-          ))}
-        </ul>
+        <Prose className="text-base">{instance.stem}</Prose>
+        <ChipBoard
+          chips={instance.rights}
+          containers={instance.lefts.map((l) => ({ id: l.id, name: l.text.trim() || "this item", capacity: 1, label: <Prose inline>{l.text}</Prose> }))}
+          placement={placement}
+          readOnly={readOnly}
+          onChange={(next) => onChange?.({ matches: Object.fromEntries(Object.entries(next).map(([r, l]) => [l, r])) })}
+        />
       </div>
     );
   },

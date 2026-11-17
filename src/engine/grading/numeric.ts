@@ -52,3 +52,37 @@ export function describeTolerance(tol: Tolerance) {
   if (parts.length === 1) return `within ${parts[0]}`;
   return `within ${parts.join(" or ")}, whichever is larger`;
 }
+
+/** A value safely outside the accepted range, for the wrong-answer run. */
+export function wrongNumber(expected: number, tol: Tolerance) {
+  return expected + 2 * allowedError(expected, tol) + Math.max(1, Math.abs(expected));
+}
+
+/**
+ * How many significant figures a typed number shows. Trailing zeros without
+ * a decimal point ("1200") are ambiguous, so the answer is a range: 2 to 4.
+ * null when the text isn't a plain number (units are ignored by the caller).
+ */
+export function countSigFigs(text: string): { min: number; max: number } | null {
+  const m = /^[+\-−]?(\d*)(?:\.(\d*))?(?:e[+-]?\d+)?$/i.exec(text.trim().replace(/,/g, ""));
+  if (!m || (!m[1] && !m[2])) return null;
+  const int = m[1] ?? "";
+  const frac = m[2];
+  const hasPoint = frac !== undefined;
+  const digits = (int + (frac ?? "")).replace(/^0+/, "");
+  if (digits === "") return { min: 1, max: 1 }; // zero: one significant figure by convention
+  if (hasPoint) return { min: digits.length, max: digits.length };
+  const trailing = /0*$/.exec(digits)![0].length;
+  return { min: digits.length - trailing, max: digits.length };
+}
+
+/** x rounded to n significant figures, written so that it shows exactly n. */
+export function toSigFigs(x: number, n: number): string {
+  return x.toPrecision(n).replace(/e\+?(-?)(\d+)$/, (_, sign: string, d: string) => `e${sign || "+"}${d}`);
+}
+
+/** Whether the typed number can be read as having exactly n significant figures. */
+export function matchesSigFigs(text: string, n: number): boolean {
+  const c = countSigFigs(text);
+  return c !== null && c.min <= n && n <= c.max;
+}

@@ -1,3 +1,4 @@
+import { generateQuestion } from "./generate";
 import { createRng, questionSeed } from "./rng";
 import type { GradeLine } from "./types";
 import { getQuestionType } from "@/question-types/registry";
@@ -38,8 +39,7 @@ export interface RegradeDiff {
 export function regradeItems(inputs: readonly RegradeInput[]): RegradeDiff[] {
   return inputs.map((i) => {
     const type = getQuestionType(i.type);
-    const def = type.defSchema.parse(i.newDef);
-    const { instance } = type.generate(def, createRng(questionSeed(i.attemptSeed, i.seedVersionId)));
+    const { instance } = generateQuestion(type, i.newDef, createRng(questionSeed(i.attemptSeed, i.seedVersionId)));
     const parsed = i.response === null ? null : type.responseSchema.safeParse(i.response);
     const response = parsed && parsed.success ? parsed.data : null;
     const r = type.grade(instance, response, { points: i.points });
@@ -113,8 +113,7 @@ export function compareReproduction({ attemptSeed, stored, rebuilt }: ReproduceI
       const label = s.version === undefined ? "a later version" : `version ${s.version}`;
       let expected: unknown = undefined;
       try {
-        const type = getQuestionType(s.type ?? "");
-        expected = type.generate(type.defSchema.parse(s.def), createRng(questionSeed(attemptSeed, s.seedVersionId))).instance;
+        expected = generateQuestion(s.type ?? "", s.def, createRng(questionSeed(attemptSeed, s.seedVersionId))).instance;
       } catch {
         // Falls through to "doesn't match".
       }

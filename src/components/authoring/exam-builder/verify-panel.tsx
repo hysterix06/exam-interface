@@ -9,6 +9,7 @@ import { simulate, type SimulationResult } from "@/engine/authoring/simulate";
 import type { ExamSettings } from "@/engine/exam";
 import { fmtNum } from "@/engine/grading/format";
 import type { Blueprint } from "@/engine/selection/types";
+import { ensureTypesReady } from "@/question-types/registry";
 
 const ICON: Record<PreflightStatus, React.ReactNode> = {
   pass: <CheckCircle2 className="size-4 text-success" aria-label="Passed" />,
@@ -37,13 +38,16 @@ export function VerifyPanel({
   topicNames: Record<string, string>;
   questionNames: Record<string, string>;
 }) {
+  const topicOf = Object.fromEntries(pool.map((q) => [q.id, q.topicId]));
   const stamp = JSON.stringify({ blueprint, settings, pool: pool.map((q) => q.versionId) });
   const [pending, start] = useTransition();
   const [report, setReport] = useState<Stamped<PreflightReport> | null>(null);
   const [sim, setSim] = useState<Stamped<SimulationResult> | null>(null);
 
+  // Code questions are checked in a sandbox that has to load first.
   const runPreflight = () =>
-    start(() => {
+    start(async () => {
+      await ensureTypesReady();
       const result = preflightExam({ blueprint, settings, pool, topicNames, questionNames });
       setReport({ result, stamp });
     });
@@ -52,7 +56,11 @@ export function VerifyPanel({
     if (autoRun) runPreflight();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arrival
   }, []);
-  const runSim = () => start(() => setSim({ result: simulate(blueprint, pool, 200), stamp }));
+  const runSim = () =>
+    start(async () => {
+      await ensureTypesReady();
+      setSim({ result: simulate(blueprint, pool, 200), stamp });
+    });
 
   return (
     <div className="grid gap-8">
@@ -103,8 +111,8 @@ export function VerifyPanel({
           </>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Checks pools, answer keys, 1,000 generations per question, points, and runs a perfect and a blank student
-            through the whole exam.
+            Checks pools, answer keys, 1,000 generations per question, points, and runs a perfect, a blank and an
+            all-wrong student through the whole exam.
           </p>
         )}
       </section>
@@ -118,7 +126,7 @@ export function VerifyPanel({
             <span className="text-sm text-warning">Out of date: you’ve changed things since this ran.</span>
           )}
         </div>
-        {sim ? <SimulationView sim={sim.result} topicNames={topicNames} /> : (
+        {sim ? <SimulationView sim={sim.result} topicNames={topicNames} questionNames={questionNames} topicOf={topicOf} /> : (
           <p className="text-sm text-muted-foreground">
             Builds 200 fake exams and answers them at random, to show how balanced the topics are and how scores spread.
           </p>
@@ -128,7 +136,17 @@ export function VerifyPanel({
   );
 }
 
-function SimulationView({ sim, topicNames }: { sim: SimulationResult; topicNames: Record<string, string> }) {
+function SimulationView({
+  sim,
+  topicNames,
+  questionNames,
+  topicOf,
+}: {
+  sim: SimulationResult;
+  topicNames: Record<string, string>;
+  questionNames: Record<string, string>;
+  topicOf: Record<string, string>;
+}) {
   if (sim.failures > 0) {
     return (
       <p role="alert" className="rounded-md border border-destructive/30 px-3 py-2 text-sm text-destructive">
@@ -163,6 +181,8 @@ function SimulationView({ sim, topicNames }: { sim: SimulationResult; topicNames
         </div>
       </div>
 
+      <DrawTable sim={sim} topicNames={topicNames} questionNames={questionNames} topicOf={topicOf} />
+
       <div>
         <h3 className="mb-2 font-medium">Score spread with random answers</h3>
         <div className="grid gap-1" role="img" aria-label="Histogram of simulated scores">
@@ -185,5 +205,56 @@ function SimulationView({ sim, topicNames }: { sim: SimulationResult; topicNames
         )}
       </div>
     </div>
+  );
+}
+
+/** How often each question landed on a fake exam: measured, not predicted. */
+function DrawTable({
+  sim,
+  topicNames,
+  questionNames,
+  topicOf,
+}: {
+  sim: SimulationResult;
+  topicNames: Record<string, string>;
+  questionNames: Record<string, string>;
+  topicOf: Record<string, string>;
+}) {
+  const built = sim.runs - sim.failures;
+  const rows = Object.entries(topicOf)
+    .map(([id, topic]) => ({ id, topic, n: sim.drawn[id] ?? 0 }))
+    .filter((r) => r.topic in sim.topicBalance)
+    .sort((a, b) => (topicNames[a.topic] ?? a.topic).localeCompare(topicNames[b.topic] ?? b.topic) || b.n - a.n);
+  if (built === 0 || rows.length === 0) return null;
+  return (
+    <details>
+      <summary className="cursor-pointer font-medium">How often each question was drawn</summary>
+      <p className="mt-1 text-muted-foreground">
+        Counted over the {fmtNum(built)} fake exams. A question that is never drawn may have a weight of 0 or lose to
+        its variant group.
+      </p>
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full max-w-2xl">
+          <thead className="text-left text-xs text-muted-foreground">
+            <tr>
+              <th className="py-1 font-medium">Question</th>
+              <th className="py-1 font-medium">Topic</th>
+              <th className="py-1 text-right font-medium">Drawn</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-t">
+                <td className="max-w-80 truncate py-1.5">{questionNames[r.id] ?? r.id}</td>
+                <td className="py-1.5 text-muted-foreground">{topicNames[r.topic] ?? r.topic}</td>
+                <td className="py-1.5 text-right tabular-nums">
+                  {fmtNum(r.n)} of {fmtNum(built)} ({fmtNum(Math.round((r.n / built) * 100))}%)
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
   );
 }

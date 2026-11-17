@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { evalCondition, evalNumber, ExprError, type Scope } from "@/engine/expr";
-import { fmtNum, orList, quote } from "@/engine/grading/format";
-import { describeTolerance, parseNumberWithUnit, withinTolerance } from "@/engine/grading/numeric";
+import { fmtNum, orList, quote, sumPoints } from "@/engine/grading/format";
+import { countSigFigs, describeTolerance, matchesSigFigs, parseNumberWithUnit, toSigFigs, withinTolerance, wrongNumber } from "@/engine/grading/numeric";
 import { defineQuestionType } from "@/engine/question-type";
 import { createRng, type Rng } from "@/engine/rng";
 import type { GradeLine, PreflightIssue } from "@/engine/types";
@@ -17,6 +17,8 @@ const variableSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("pick"), name: z.string(), options: z.array(z.string()) }),
 ]);
 
+const sigFigsSchema = z.object({ count: z.number().int().min(1).max(15), weight: z.number().gt(0).lt(1) });
+
 const defSchema = z.object({
   /** Text with {name} placeholders, replaced by this student's values. */
   stem: z.string(),
@@ -27,6 +29,8 @@ const defSchema = z.object({
   answer: z.string(),
   tolerance: z.object({ abs: z.number().min(0).optional(), rel: z.number().min(0).optional() }).default({}),
   units: z.array(z.string()).optional(),
+  /** Also mark the answer for being given to `count` significant figures, worth `weight` of the points. */
+  sigFigs: sigFigsSchema.optional(),
 });
 
 const instanceSchema = z.object({
@@ -37,6 +41,8 @@ const instanceSchema = z.object({
   units: z.array(z.string()).optional(),
   /** Plain-language working shown to the educator. */
   working: z.string(),
+  /** Present only when the question marks significant figures (older instances never have it). */
+  sigFigs: sigFigsSchema.optional(),
 });
 const responseSchema = z.object({ text: z.string() });
 
@@ -59,6 +65,11 @@ export function fillStem(stem: string, values: Record<string, number | string | 
   return stem.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (whole, name: string) =>
     name in values ? (typeof values[name] === "number" ? fmtNum(values[name] as number) : String(values[name])) : whole,
   );
+}
+
+/** The key's number: rounded to the required significant figures when they're marked. */
+function keyNumber(inst: NumericInstance) {
+  return inst.sigFigs ? toSigFigs(inst.answer, inst.sigFigs.count) : String(inst.answer);
 }
 
 export interface Drawn {
@@ -110,6 +121,7 @@ export const numeric = defineQuestionType<NumericDef, NumericInstance, NumericRe
         rel: def.tolerance.rel ?? 0,
         units: def.units?.length ? def.units : undefined,
         working: `${def.answer} with ${used || "no variables"} gives ${fmtNum(answer)}.`,
+        ...(def.sigFigs ? { sigFigs: def.sigFigs } : {}),
       },
       vars: { ...values, answer, tries },
     };
@@ -118,44 +130,70 @@ export const numeric = defineQuestionType<NumericDef, NumericInstance, NumericRe
   grade(inst, response, { points }) {
     const tol = { abs: inst.abs || undefined, rel: inst.rel || undefined };
     const unit = inst.units?.length ? ` ${orList(inst.units)}` : "";
-    const expected = `${fmtNum(inst.answer)}${unit}, ${describeTolerance(tol)}`;
+    const sf = inst.sigFigs;
+    const rounded = sf ? toSigFigs(inst.answer, sf.count) : null;
+    const expected = `${sf ? rounded : fmtNum(inst.answer)}${unit}, ${sf ? `or ${fmtNum(inst.answer)} ${describeTolerance(tol)}` : describeTolerance(tol)}`;
     const got = (response?.text ?? "").trim();
-    const one = (l: Omit<GradeLine, "label" | "max">, score: number) => ({
-      score,
-      max: points,
-      needsReview: false,
-      lines: [{ label: "Answer", max: points, ...l }],
-    });
+    const valueMax = sf ? points * (1 - sf.weight) : points;
+    const sigMax = sf ? points * sf.weight : 0;
+    const result = (lines: GradeLine[]) => ({ score: sumPoints(lines), max: points, needsReview: false, lines });
+    const value = (l: Omit<GradeLine, "label" | "max">): GradeLine => ({ label: "Answer", max: valueMax, ...l });
+    const sig = (l: Omit<GradeLine, "label" | "max" | "expected">): GradeLine => ({ label: "Significant figures", max: sigMax, expected: `${sf!.count}`, ...l });
 
-    if (!got) return one({ expected, got: "no answer", verdict: "unanswered", points: 0 }, 0);
+    if (!got) {
+      return result([value({ expected, got: "no answer", verdict: "unanswered", points: 0 }), ...(sf ? [sig({ got: "no answer", verdict: "unanswered", points: 0 })] : [])]);
+    }
 
     const parsed = parseNumberWithUnit(got);
-    if (!parsed) return one({ expected, got: quote(got), verdict: "wrong", points: 0, note: `Not a number. ${inst.working}` }, 0);
-    if (inst.units && !inst.units.includes(parsed.unit)) {
-      return one(
-        { expected, got: quote(got), verdict: "wrong", points: 0, note: parsed.unit ? `Unit ${quote(parsed.unit)} is not accepted.` : "The answer needs a unit." },
-        0,
-      );
-    }
-    const ok = withinTolerance(inst.answer, parsed.value, tol);
-    return one(
-      {
+    const unitOk = !inst.units || (parsed !== null && inst.units.includes(parsed.unit));
+    let valueLine: GradeLine;
+    if (!parsed) valueLine = value({ expected, got: quote(got), verdict: "wrong", points: 0, note: `Not a number. ${inst.working}` });
+    else if (!unitOk) {
+      valueLine = value({ expected, got: quote(got), verdict: "wrong", points: 0, note: parsed.unit ? `Unit ${quote(parsed.unit)} is not accepted.` : "The answer needs a unit." });
+    } else {
+      // With significant figures marked, the correctly rounded value is right even under an exact tolerance.
+      const ok = withinTolerance(inst.answer, parsed.value, tol) || (rounded !== null && withinTolerance(Number(rounded), parsed.value, {}));
+      valueLine = value({
         expected,
         got: quote(got),
         verdict: ok ? "correct" : "wrong",
-        points: ok ? points : 0,
+        points: ok ? valueMax : 0,
         note: `Off by ${fmtNum(Math.abs(parsed.value - inst.answer))}. ${inst.working}`,
-      },
-      ok ? points : 0,
-    );
+      });
+    }
+    if (!sf) return result([valueLine]);
+
+    const typed = parsed ? got.slice(0, got.length - parsed.unit.length).trim() : got;
+    const shown = countSigFigs(typed);
+    const sfOk = shown !== null && matchesSigFigs(typed, sf.count);
+    const shownText = shown === null ? "not a number" : shown.min === shown.max ? `${shown.min}` : `${shown.min} to ${shown.max}`;
+    return result([
+      valueLine,
+      sig({
+        got: shownText,
+        verdict: sfOk ? "correct" : "wrong",
+        points: sfOk ? sigMax : 0,
+        note: shown && shown.min !== shown.max ? `Trailing zeros without a decimal point could be significant or not, so ${quote(typed)} counts as ${shownText}.` : undefined,
+      }),
+    ]);
   },
 
-  keyResponse: (inst) => ({ text: `${inst.answer}${inst.units?.length ? ` ${inst.units[0]}` : ""}` }),
+  keyResponse: (inst) => ({ text: `${keyNumber(inst)}${inst.units?.length ? ` ${inst.units[0]}` : ""}` }),
 
   randomResponse(inst, rng) {
-    if (rng.next() < 0.33) return { text: `${inst.answer}${inst.units?.length ? ` ${inst.units[0]}` : ""}` };
+    if (rng.next() < 0.33) return { text: `${keyNumber(inst)}${inst.units?.length ? ` ${inst.units[0]}` : ""}` };
     return { text: `${fmtNum(inst.answer * rng.float(0.5, 1.5) + 1)}${inst.units?.length ? ` ${inst.units[0]}` : ""}` };
   },
+
+  wrongResponse(inst) {
+    const w = wrongNumber(inst.answer, { abs: inst.abs || undefined, rel: inst.rel || undefined });
+    // With significant figures marked, show one figure too many (in exponent form, so it isn't ambiguous).
+    const text = inst.sigFigs ? w.toExponential(inst.sigFigs.count) : fmtNum(w);
+    return { text: `${text}${inst.units?.length ? ` ${inst.units[0]}` : ""}` };
+  },
+
+  // Reading the numbers, working it out, checking.
+  estimateSeconds: () => 120,
 
   validateDef(def) {
     const issues: PreflightIssue[] = [];

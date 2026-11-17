@@ -12,9 +12,11 @@ import {
   questions,
   questionVersions,
 } from "@/db/schema";
+import { nextAdaptive } from "@/engine/adaptive-live";
 import { type AttemptPoolItem, buildAttempt } from "@/engine/attempt";
 import { computeDeadline } from "@/engine/attempts/deadline";
-import { examSettingsSchema } from "@/engine/exam";
+import { lateWindowMinutes } from "@/engine/attempts/late";
+import { examSettingsSchema, isSequential } from "@/engine/exam";
 import { effectiveState } from "@/engine/exam-state";
 import { BlueprintError } from "@/engine/selection/select";
 import { blueprintSchema } from "@/engine/selection/types";
@@ -22,6 +24,7 @@ import type { CurrentUser } from "@/server/auth";
 import { scopeFor } from "@/server/access";
 import { getExam, loadPool } from "@/server/authoring/data";
 import type { ActionResult } from "@/server/authoring/questions";
+import { buildPlan, insertStep } from "./adaptive";
 import { hashCode } from "./codes";
 
 type Exam = typeof exams.$inferSelect;
@@ -42,6 +45,7 @@ export async function lockedPool(exam: Exam): Promise<AttemptPoolItem[]> {
       points: questionVersions.points,
       groupKey: questionVersions.groupKey,
       conflictsWith: questionVersions.conflictsWith,
+      tags: questionVersions.tags,
     })
     .from(questionVersions)
     .innerJoin(questions, eq(questions.id, questionVersions.questionId))
@@ -72,6 +76,7 @@ async function create(
   const blueprint = blueprintSchema.parse(exam.blueprint);
   const settings = examSettingsSchema.parse(exam.settings);
   const seed = randomUUID();
+  if (settings.adaptive) return createAdaptive(tx, user, exam, pool, isPreview, seed, blueprint, settings);
 
   let built;
   try {
@@ -88,9 +93,21 @@ async function create(
   const startedAt = new Date();
   const deadlineAt = computeDeadline(startedAt, settings.timeLimitMinutes, exts);
 
+  // Sequential attempts start on question 1, opened now; free ones have no cursor.
+  const sequential = isSequential(settings);
   const [a] = await tx
     .insert(attempts)
-    .values({ orgId: user.orgId, examId: exam.id, userId: user.id, seed, isPreview, startedAt, deadlineAt })
+    .values({
+      orgId: user.orgId,
+      examId: exam.id,
+      userId: user.id,
+      seed,
+      isPreview,
+      startedAt,
+      deadlineAt,
+      cursor: sequential ? 0 : null,
+      lateWindowMinutes: deadlineAt ? lateWindowMinutes(settings.late) : 0,
+    })
     .returning({ id: attempts.id });
   await tx.insert(attemptItems).values(
     built.items.map((i) => ({
@@ -99,8 +116,37 @@ async function create(
       seedVersionId: i.versionId,
       position: i.position,
       instance: i.instance,
+      openedAt: sequential && i.position === 0 ? startedAt : null,
     })),
   );
+  return a.id;
+}
+
+/** An adaptive attempt: freeze the plan, then create only the first question. */
+async function createAdaptive(
+  tx: Tx,
+  user: CurrentUser,
+  exam: Exam,
+  pool: AttemptPoolItem[],
+  isPreview: boolean,
+  seed: string,
+  blueprint: ReturnType<typeof blueprintSchema.parse>,
+  settings: ReturnType<typeof examSettingsSchema.parse>,
+): Promise<string> {
+  const plan = await buildPlan(tx, exam.id, blueprint, settings.adaptive!, pool);
+  const first = nextAdaptive(seed, plan, []);
+  if (!first || plan.length === 0) throw new StartError(CANT_BUILD);
+  const exts = await tx
+    .select({ kind: extensions.kind, value: extensions.value })
+    .from(extensions)
+    .where(and(eq(extensions.userId, user.id), or(isNull(extensions.examId), eq(extensions.examId, exam.id))));
+  const startedAt = new Date();
+  const deadlineAt = computeDeadline(startedAt, settings.timeLimitMinutes, exts);
+  const [a] = await tx
+    .insert(attempts)
+    .values({ orgId: user.orgId, examId: exam.id, userId: user.id, seed, isPreview, startedAt, deadlineAt, cursor: 0, plan, lateWindowMinutes: deadlineAt ? lateWindowMinutes(settings.late) : 0 })
+    .returning({ id: attempts.id });
+  await insertStep(tx, { id: a.id, seed }, first.item, first.trace, 0, startedAt);
   return a.id;
 }
 

@@ -1,0 +1,647 @@
+{
+ "fixtures": {
+  "mcq": [
+   {
+    "stem": "Which organelle produces most of a cell's ATP?",
+    "options": [
+     {
+      "id": "a",
+      "text": "Nucleus",
+      "correct": false
+     },
+     {
+      "id": "b",
+      "text": "Mitochondrion",
+      "correct": true,
+      "feedback": "Right: oxidative phosphorylation."
+     },
+     {
+      "id": "c",
+      "text": "Ribosome",
+      "correct": false
+     },
+     {
+      "id": "d",
+      "text": "Golgi apparatus",
+      "correct": false
+     }
+    ],
+    "multiple": false,
+    "shuffle": true,
+    "scoring": "all-or-nothing",
+    "penalty": 0.25
+   },
+   {
+    "stem": "Select every prime number.",
+    "options": [
+     {
+      "id": "2",
+      "text": "2",
+      "correct": true
+     },
+     {
+      "id": "4",
+      "text": "4",
+      "correct": false
+     },
+     {
+      "id": "7",
+      "text": "7",
+      "correct": true
+     },
+     {
+      "id": "9",
+      "text": "9",
+      "correct": false
+     },
+     {
+      "id": "11",
+      "text": "11",
+      "correct": true
+     }
+    ],
+    "multiple": true,
+    "shuffle": true,
+    "scoring": "right-minus-wrong",
+    "penalty": 0
+   },
+   {
+    "stem": "Which are mammals?",
+    "options": [
+     {
+      "id": "w",
+      "text": "Whale",
+      "correct": true
+     },
+     {
+      "id": "s",
+      "text": "Shark",
+      "correct": false
+     },
+     {
+      "id": "b",
+      "text": "Bat",
+      "correct": true
+     }
+    ],
+    "multiple": true,
+    "shuffle": false,
+    "scoring": "per-option",
+    "penalty": 0
+   }
+  ],
+  "true-false": [
+   {
+    "stem": "DNA is double-stranded.",
+    "answer": true,
+    "penalty": 0
+   },
+   {
+    "stem": "Plant cells lack a cell wall.",
+    "answer": false,
+    "penalty": 0.5
+   }
+  ],
+  "dropdown": [
+   {
+    "stem": "The powerhouse of the cell is the…",
+    "options": [
+     {
+      "id": "n",
+      "text": "nucleus"
+     },
+     {
+      "id": "m",
+      "text": "mitochondrion"
+     },
+     {
+      "id": "v",
+      "text": "vacuole"
+     }
+    ],
+    "answer": "m",
+    "shuffle": true
+   }
+  ],
+  "short-answer": [
+   {
+    "stem": "What is the capital of France?",
+    "match": {
+     "kind": "text",
+     "accepted": [
+      "Paris"
+     ],
+     "caseSensitive": false,
+     "collapseWhitespace": true
+    }
+   },
+   {
+    "stem": "Spell the word for the visible spectrum's attribute (US or UK spelling).",
+    "match": {
+     "kind": "regex",
+     "pattern": "colou?r",
+     "caseSensitive": false,
+     "example": "color"
+    }
+   },
+   {
+    "stem": "Acceleration due to gravity at Earth's surface?",
+    "match": {
+     "kind": "numeric",
+     "value": 9.81,
+     "tolerance": {
+      "abs": 0.05
+     },
+     "units": [
+      "m/s^2",
+      "m/s²"
+     ]
+    }
+   },
+   {
+    "stem": "How many chromosomes are in a human somatic cell?",
+    "match": {
+     "kind": "numeric",
+     "value": 46,
+     "tolerance": {}
+    }
+   }
+  ],
+  "ordering": [
+   {
+    "stem": "Put the stages of mitosis in order.",
+    "items": [
+     {
+      "id": "p",
+      "text": "Prophase"
+     },
+     {
+      "id": "m",
+      "text": "Metaphase"
+     },
+     {
+      "id": "a",
+      "text": "Anaphase"
+     },
+     {
+      "id": "t",
+      "text": "Telophase"
+     }
+    ]
+   },
+   {
+    "stem": "Order these from smallest to largest.",
+    "items": [
+     {
+      "id": "1",
+      "text": "Atom"
+     },
+     {
+      "id": "2",
+      "text": "Molecule"
+     },
+     {
+      "id": "3",
+      "text": "Cell"
+     }
+    ]
+   }
+  ],
+  "matching": [
+   {
+    "stem": "Match each organelle to its job.",
+    "pairs": [
+     {
+      "id": "m",
+      "left": "Mitochondrion",
+      "right": "Makes ATP"
+     },
+     {
+      "id": "r",
+      "left": "Ribosome",
+      "right": "Builds proteins"
+     },
+     {
+      "id": "l",
+      "left": "Lysosome",
+      "right": "Breaks down waste"
+     }
+    ],
+    "distractors": [
+     "Stores genetic code"
+    ]
+   },
+   {
+    "stem": "Match the country to its capital.",
+    "pairs": [
+     {
+      "id": "f",
+      "left": "France",
+      "right": "Paris"
+     },
+     {
+      "id": "j",
+      "left": "Japan",
+      "right": "Tokyo"
+     }
+    ],
+    "distractors": []
+   }
+  ],
+  "cloze": [
+   {
+    "template": "The capital of France is {{text:Paris|paris}} and 2 + 2 is {{num:4}}."
+   },
+   {
+    "template": "Water boils at {{num:100±1}} °C, and ice is {{select:hot|cold*|loud}}."
+   },
+   {
+    "template": "A reading of {{num:50±10%}} counts as close, in a {{select:lab*|kitchen}}."
+   }
+  ],
+  "numeric": [
+   {
+    "stem": "A shop sells {n} notebooks at ${price} each. What is the total cost?",
+    "variables": [
+     {
+      "kind": "int",
+      "name": "n",
+      "min": 2,
+      "max": 9
+     },
+     {
+      "kind": "float",
+      "name": "price",
+      "min": 1,
+      "max": 5,
+      "decimals": 2
+     }
+    ],
+    "constraints": [],
+    "answer": "n * price",
+    "tolerance": {
+     "abs": 0.01
+    }
+   },
+   {
+    "stem": "{a} ÷ {b} = ? (a whole number, in cm)",
+    "variables": [
+     {
+      "kind": "int",
+      "name": "a",
+      "min": 10,
+      "max": 90
+     },
+     {
+      "kind": "int",
+      "name": "b",
+      "min": 2,
+      "max": 9
+     }
+    ],
+    "constraints": [
+     "b != a",
+     "answer == round(answer)"
+    ],
+    "answer": "a / b",
+    "tolerance": {},
+    "units": [
+     "cm"
+    ]
+   },
+   {
+    "stem": "{item} costs ${cost}. With {tax}% tax, what is the total?",
+    "variables": [
+     {
+      "kind": "pick",
+      "name": "item",
+      "options": [
+       "A pen",
+       "A mug",
+       "A book"
+      ]
+     },
+     {
+      "kind": "pick",
+      "name": "cost",
+      "options": [
+       "10",
+       "20",
+       "40"
+      ]
+     },
+     {
+      "kind": "pick",
+      "name": "tax",
+      "options": [
+       "5",
+       "10"
+      ]
+     }
+    ],
+    "constraints": [],
+    "answer": "cost * (1 + tax / 100)",
+    "tolerance": {
+     "rel": 0.01
+    }
+   }
+  ],
+  "long-answer": [
+   {
+    "stem": "Explain how a cell obtains energy from glucose.",
+    "rubric": [
+     {
+      "id": "g",
+      "text": "Mentions glycolysis",
+      "points": 1
+     },
+     {
+      "id": "k",
+      "text": "Mentions the Krebs cycle or the electron transport chain",
+      "points": 2
+     },
+     {
+      "id": "a",
+      "text": "States that ATP is produced",
+      "points": 1
+     }
+    ],
+    "maxWords": 200,
+    "keywords": [
+     "glycolysis",
+     "ATP",
+     "mitochondria"
+    ]
+   },
+   {
+    "stem": "Describe one cause of a changing climate.",
+    "rubric": [
+     {
+      "id": "c",
+      "text": "Gives a cause with a reason",
+      "points": 1
+     }
+    ],
+    "maxWords": null,
+    "keywords": []
+   }
+  ],
+  "table-fill": [
+   {
+    "stem": "Complete the table of unit prices.",
+    "columns": [
+     "Item",
+     "Quantity",
+     "Total ($)"
+    ],
+    "rows": [
+     [
+      "Pens",
+      "{{num:4}}",
+      "8"
+     ],
+     [
+      "Books",
+      "3",
+      "{{num:30±1}}"
+     ],
+     [
+      "{{text:Mugs|Cups}}",
+      "2",
+      "{{num:10}}"
+     ]
+    ]
+   },
+   {
+    "stem": "Classify each animal.",
+    "columns": [
+     "Animal",
+     "Class"
+    ],
+    "rows": [
+     [
+      "Frog",
+      "{{select:Mammal|Amphibian*|Bird}}"
+     ],
+     [
+      "Eagle",
+      "{{select:Mammal|Amphibian|Bird*}}"
+     ]
+    ]
+   }
+  ],
+  "spreadsheet": [
+   {
+    "stem": "Work out the cost of each line, then the grand total, using formulas.",
+    "rows": 5,
+    "cols": 4,
+    "cells": {
+     "A1": "Item",
+     "B1": "Qty",
+     "C1": "Price",
+     "D1": "Cost",
+     "A2": "Pens",
+     "B2": "4",
+     "C2": "1.5",
+     "A3": "Books",
+     "B3": "2",
+     "C3": "12",
+     "A4": "Total"
+    },
+    "inputs": [
+     "D2",
+     "D3",
+     "D4"
+    ],
+    "solution": {
+     "D2": "=B2*C2",
+     "D3": "=B3*C3",
+     "D4": "=SUM(D2:D3)"
+    },
+    "checks": [
+     {
+      "id": "c1",
+      "cell": "D2",
+      "label": "Cost of pens",
+      "requireFormula": true
+     },
+     {
+      "id": "c2",
+      "cell": "D3",
+      "label": "Cost of books",
+      "requireFormula": false
+     },
+     {
+      "id": "c3",
+      "cell": "D4",
+      "label": "Grand total",
+      "requireFormula": true
+     }
+    ]
+   },
+   {
+    "stem": "Enter the average of the three scores in B4.",
+    "rows": 4,
+    "cols": 2,
+    "cells": {
+     "A1": "Test 1",
+     "B1": "70",
+     "A2": "Test 2",
+     "B2": "80",
+     "A3": "Test 3",
+     "B3": "90",
+     "A4": "Average"
+    },
+    "inputs": [
+     "B4"
+    ],
+    "solution": {
+     "B4": "=AVERAGE(B1:B3)"
+    },
+    "checks": [
+     {
+      "id": "avg",
+      "cell": "B4",
+      "label": "Average score",
+      "abs": 0.01,
+      "requireFormula": false
+     }
+    ]
+   },
+   {
+    "stem": "Use SUM to total the four colony counts in B5.",
+    "rows": 5,
+    "cols": 2,
+    "cells": {
+     "A1": "Plate 1",
+     "B1": "30",
+     "A2": "Plate 2",
+     "B2": "40",
+     "A3": "Plate 3",
+     "B3": "25",
+     "A4": "Plate 4",
+     "B4": "45",
+     "A5": "Total"
+    },
+    "inputs": [
+     "B5"
+    ],
+    "solution": {
+     "B5": "=SUM(B1:B4)"
+    },
+    "checks": [
+     {
+      "id": "total",
+      "cell": "B5",
+      "label": "Total colonies",
+      "requireFormula": true,
+      "functions": [
+       "SUM"
+      ]
+     }
+    ]
+   }
+  ],
+  "widget": [
+   {
+    "stem": "Ring up 2 Coffees and 1 Croissant, then apply the 10% staff discount. Report the total.",
+    "widget": "pos-demo",
+    "config": {
+     "menu": [
+      {
+       "name": "Coffee",
+       "price": 3
+      },
+      {
+       "name": "Croissant",
+       "price": 4
+      },
+      {
+       "name": "Juice",
+       "price": 5
+      }
+     ],
+     "discounts": [
+      0,
+      10,
+      20
+     ]
+    },
+    "checks": [
+     {
+      "kind": "number",
+      "id": "total",
+      "label": "Order total",
+      "path": "total",
+      "expected": 9,
+      "abs": 0.01
+     },
+     {
+      "kind": "number",
+      "id": "lines",
+      "label": "Lines on the order",
+      "path": "order.length",
+      "expected": 2,
+      "abs": 0
+     },
+     {
+      "kind": "number",
+      "id": "disc",
+      "label": "Discount applied (%)",
+      "path": "discountPct",
+      "expected": 10,
+      "abs": 0
+     }
+    ],
+    "solution": {
+     "order": [
+      {
+       "name": "Coffee",
+       "qty": 2,
+       "price": 3
+      },
+      {
+       "name": "Croissant",
+       "qty": 1,
+       "price": 4
+      }
+     ],
+     "discountPct": 10,
+     "total": 9
+    }
+   }
+  ]
+ },
+ "digests": {
+  "all/golden:0": "9af1127efe3cfb59f240a9afb814ac35",
+  "draw/golden:0": "bfba708b512151dc54d1b2cf16f0624a",
+  "mix/golden:0": "52fc3816f4b70daa3fcc2ddd7a788d37",
+  "all/golden:1": "af7b1acde83e28a862923ccbe69a241a",
+  "draw/golden:1": "cca877acfd646586584c05d13cc1f604",
+  "mix/golden:1": "feeb1da18f455369ea7d03a06fd61230",
+  "all/golden:2": "595d51514af3ec4aca20b0fdf45efc29",
+  "draw/golden:2": "1da72b02850b21fe5e7ff679b94289da",
+  "mix/golden:2": "ddce0a213a41d2f034119f5eb4901740",
+  "all/golden:3": "be6229e236a5a573911b9bd55815601d",
+  "draw/golden:3": "9abaeb12ecad8c994a82d80fc71f4267",
+  "mix/golden:3": "82d88c0e36eada122556bd037c3e51b5",
+  "all/golden:4": "34e87dd4016cabab3233efccf12c7c15",
+  "draw/golden:4": "b95272a09288d31c43da3c9487d2ecdf",
+  "mix/golden:4": "dfa683c528d6049103375533697f60fb",
+  "all/golden:5": "bdf8b80e6ed8bddadbdc8e6072e80778",
+  "draw/golden:5": "01a7ba39b95206c8ea88c56984efefc1",
+  "mix/golden:5": "a691defd24172e5617f4142722f729dd",
+  "all/golden:6": "2f696d8de13cecbab8001a1a5e0f1f06",
+  "draw/golden:6": "e142b1ebe417287e765375c99233aee6",
+  "mix/golden:6": "194a41e4f48faf880fc8c66d91b6e8ae",
+  "all/golden:7": "9c36dc2941c9371596daa13a36aa9935",
+  "draw/golden:7": "bcf38210fbfa9c7969ba9345835fb768",
+  "mix/golden:7": "9269eb5aec689aea137d547f31ac9974",
+  "all/golden:8": "2e822089da05e8f07d17094acd6ef708",
+  "draw/golden:8": "4a8526fc74e1ca5e1c59e060df338546",
+  "mix/golden:8": "01c18bc0fe9c25dab94d7e16433aa47a",
+  "all/golden:9": "d9ccaa1cb3c843b6c72254df9cdac620",
+  "draw/golden:9": "fcdc62cef6f49a271c557b6fb8958cd5",
+  "mix/golden:9": "c87c7e71b15c0b9b0ba8109d36353897"
+ }
+}

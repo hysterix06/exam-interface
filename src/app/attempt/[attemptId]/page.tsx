@@ -21,6 +21,10 @@ export default async function AttemptPage({ params }: PageProps<"/attempt/[attem
       isPreview={attempt.isPreview}
       oneWay={attempt.oneWay}
       deadlineAt={attempt.deadlineAt}
+      hardDeadlineAt={attempt.hardDeadlineAt}
+      itemDeadlineAt={attempt.itemDeadlineAt}
+      cursor={attempt.cursor}
+      total={attempt.total}
       serverNow={attempt.serverNow}
       initialSecondsLeft={attempt.secondsLeft}
       items={attempt.items}

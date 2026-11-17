@@ -6,9 +6,11 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { exploreVariants } from "@/engine/authoring/variants";
+import { generateQuestion, splitDef } from "@/engine/generate";
 import { createRng } from "@/engine/rng";
 import { getQuestionType } from "@/question-types/registry";
 import { getQuestionTypeUi } from "@/question-types/ui-registry";
+import { useTypesReady } from "@/question-types/use-types-ready";
 import { GradeLines } from "./grade-lines";
 
 type Tab = "student" | "variants";
@@ -33,20 +35,22 @@ export function QuestionPreview({
 
   const type = getQuestionType(typeId);
   const ui = getQuestionTypeUi(typeId);
+  // Code questions grade in a sandbox that loads in the background.
+  const ready = useTypesReady();
 
   const generated = useMemo(() => {
-    const parsed = type.defSchema.safeParse(def);
-    if (!parsed.success) return { error: "Finish the question to see a preview." } as const;
+    if (!type.defSchema.safeParse(splitDef(def).def).success) return { error: "Finish the question to see a preview." } as const;
+    if (type.init && !ready) return { error: "Loading the code sandbox…" } as const;
     try {
-      return { ok: type.generate(parsed.data, createRng(seed)) } as const;
+      return { ok: generateQuestion(type, def, createRng(seed)) } as const;
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) } as const;
     }
-  }, [type, def, seed]);
+  }, [type, def, seed, ready]);
 
   const variants = useMemo(
-    () => (tab === "variants" ? exploreVariants(typeId, def) : null),
-    [tab, typeId, def],
+    () => (tab === "variants" && (ready || !type.init) ? exploreVariants(typeId, def) : null),
+    [tab, typeId, def, ready, type],
   );
 
   const reroll = () => {

@@ -1,4 +1,6 @@
 "use client";
+import { withFormatHint } from "../hints";
+import { Prose } from "@/components/ui/prose";
 import { useId } from "react";
 
 import { Field } from "@/components/ui/field";
@@ -25,7 +27,7 @@ export const trueFalseUi: QuestionTypeUi<TrueFalseDef, StudentInstance, TrueFals
     const set = (patch: Partial<TrueFalseDef>) => onChange({ ...def, ...patch });
     return (
       <div className="grid gap-5">
-        <Field label="Statement" hint="Write it so it is clearly true or clearly false.">
+        <Field label="Statement" hint={withFormatHint("Write it so it is clearly true or clearly false.")}>
           <Textarea value={def.stem} onChange={(e) => set({ stem: e.target.value })} />
         </Field>
         <div className="grid gap-2">
@@ -57,7 +59,7 @@ export const trueFalseUi: QuestionTypeUi<TrueFalseDef, StudentInstance, TrueFals
     const stemId = useId();
     return (
       <div className="grid gap-4">
-        <p id={stemId} className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <Prose id={stemId} className="text-base">{instance.stem}</Prose>
         <ChoiceList
           options={OPTIONS}
           selected={value ? [String(value.value)] : []}

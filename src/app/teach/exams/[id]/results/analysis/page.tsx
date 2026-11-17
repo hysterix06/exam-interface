@@ -1,5 +1,8 @@
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { Explain } from "@/components/ui/explain";
+import { explainItem } from "@/engine/analysis";
+import { fmtDuration } from "@/engine/dwell";
 import { fmtNum } from "@/engine/grading/format";
 import type { Metadata } from "next";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -34,16 +37,26 @@ export default async function AnalysisPage({ params }: PageProps<"/teach/exams/[
               <dl className="mt-2 flex flex-wrap gap-x-8 gap-y-1 text-sm">
                 <div>
                   <dt className="text-xs text-muted-foreground" title="Average share of the available points earned">Percent correct</dt>
-                  <dd className="tabular-nums">{Math.round(q.difficulty * 100)}%</dd>
+                  <dd className="tabular-nums">
+                    <Explain explanation={explainItem(q).difficulty}>{Math.round(q.difficulty * 100)}%</Explain>
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground" title="Correlation with the rest of the exam, −1 to 1. Above 0.3 is good.">Discrimination</dt>
-                  <dd className="tabular-nums">{q.discrimination === null ? "n/a" : fmtNum(q.discrimination)}</dd>
+                  <dd className="tabular-nums">
+                    <Explain explanation={explainItem(q).discrimination}>{q.discrimination === null ? "n/a" : fmtNum(q.discrimination)}</Explain>
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Answered</dt>
                   <dd className="tabular-nums">{q.n}</dd>
                 </div>
+                {q.medianSeconds !== null && (
+                  <div>
+                    <dt className="text-xs text-muted-foreground" title="Median time on screen, from the event log; tab switches and idle time left out">Typical time</dt>
+                    <dd className="tabular-nums">about {fmtDuration(q.medianSeconds)}</dd>
+                  </div>
+                )}
               </dl>
               {q.flags.length > 0 && (
                 <ul className="mt-3 grid gap-1 text-sm">
@@ -57,11 +70,11 @@ export default async function AnalysisPage({ params }: PageProps<"/teach/exams/[
               )}
               {q.distractors.length > 0 && (
                 <details className="mt-3">
-                  <summary className="cursor-pointer text-sm font-medium">Which options students chose</summary>
+                  <summary className="cursor-pointer text-sm font-medium">{q.options ? "Which options students chose" : "What students chose"}</summary>
                   <table className="mt-2 w-full text-sm">
                     <thead className="text-left text-xs text-muted-foreground">
                       <tr>
-                        <th className="py-1 font-medium">Option</th>
+                        <th className="py-1 font-medium">{q.options ? "Option" : "Choice"}</th>
                         <th className="py-1 text-right font-medium">All</th>
                         <th className="py-1 text-right font-medium">Top 27%</th>
                         <th className="py-1 text-right font-medium">Bottom 27%</th>

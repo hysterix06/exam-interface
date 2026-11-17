@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Front desk demo</title>
+<style>
+  :root { color-scheme: light dark; font: 14px/1.4 system-ui, sans-serif; }
+  body { margin: 0; padding: 12px; }
+  h2 { margin: 0 0 8px; font-size: 13px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; opacity: .6; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+  button, select, input { font: inherit; padding: 6px 10px; border: 1px solid #8884; border-radius: 6px; background: transparent; color: inherit; }
+  button { cursor: pointer; }
+  button:hover:not(:disabled) { background: #8882; }
+  button:disabled, select:disabled, input:disabled { opacity: .5; cursor: default; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-weight: 500; opacity: .6; font-size: 12px; }
+  td, th { padding: 4px 4px 4px 0; border-bottom: 1px solid #8883; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.pick { cursor: pointer; }
+  tr.pick:hover { background: #8881; }
+  tr.chosen { outline: 2px solid currentColor; outline-offset: -2px; }
+  .muted { opacity: .6; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .total { display: flex; justify-content: space-between; margin-top: 10px; font-size: 18px; font-weight: 600; }
+  .card { border: 1px solid #8884; border-radius: 8px; padding: 10px; margin-bottom: 12px; }
+  .ok { font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="card" id="booking"></div>
+<div class="grid">
+  <section>
+    <h2>Rooms</h2>
+    <table><thead><tr><th>Room</th><th>Type</th><th>Status</th><th class="num">Rate</th></tr></thead><tbody id="rooms"></tbody></table>
+    <div class="row">
+      <label for="nights">Nights</label><input id="nights" type="number" min="1" max="30" style="width:5em" />
+      <button id="checkin">Check in</button>
+    </div>
+    <p class="muted" id="status" role="status" aria-live="polite">Pick a clean room by clicking its row (or Enter on it).</p>
+  </section>
+  <section>
+    <h2>Folio</h2>
+    <table><tbody id="folio"></tbody></table>
+    <p class="muted" id="empty">No charges yet.</p>
+    <div class="row"><label for="extra">Add charge</label><select id="extra"></select><button id="add">Add</button></div>
+    <div class="total"><span>Balance</span><span id="total">0.00</span></div>
+  </section>
+</div>
+<script>
+// A front-desk (property management) mock that speaks the exam widget
+// protocol (version 1). The student assigns a suitable clean room, sets the
+// nights, checks the guest in and posts extras to the folio.
+//   config: { booking: { guest, roomType, nights, note }, rooms: [{ number, type, status, rate }], extras: [{ name, price }] }
+//   state:  { room, roomType, nights, checkedIn, folio: [{ item, amount }], roomCharge, total }
+(function () {
+  var VERSION = 1;
+  var booking = {}, rooms = [], extras = [], readOnly = false;
+  var room = null, nights = 1, checkedIn = false, folio = [];
+
+  function rateOf(n) { var r = rooms.find(function (x) { return x.number === n; }); return r ? r.rate : 0; }
+  function typeOf(n) { var r = rooms.find(function (x) { return x.number === n; }); return r ? r.type : null; }
+  function money(n) { return (Math.round(n * 100) / 100).toFixed(2); }
+  function roomCharge() { return checkedIn && room ? Math.round(rateOf(room) * nights * 100) / 100 : 0; }
+  function total() { return Math.round((roomCharge() + folio.reduce(function (s, f) { return s + f.amount; }, 0)) * 100) / 100; }
+  function state() { return { room: room, roomType: typeOf(room), nights: nights, checkedIn: checkedIn, folio: folio, roomCharge: roomCharge(), total: total() }; }
+  function report() { parent.postMessage({ type: "exam:response", version: VERSION, state: state() }, "*"); }
+  function say(t) { document.getElementById("status").textContent = t; }
+
+  function text(tag, t, cls) { var e = document.createElement(tag); e.textContent = t; if (cls) e.className = cls; return e; }
+
+  function render() {
+    var b = document.getElementById("booking");
+    b.innerHTML = "";
+    b.append(text("h2", "Arrival"), text("div", (booking.guest || "Guest") + " · requested: " + (booking.roomType || "any room") + " · " + (booking.nights || 1) + " night(s)"));
+    if (booking.note) b.append(text("div", booking.note, "muted"));
+    if (checkedIn) b.append(text("div", "Checked in to room " + room + ".", "ok"));
+
+    var tb = document.getElementById("rooms");
+    tb.innerHTML = "";
+    rooms.forEach(function (r) {
+      var tr = document.createElement("tr");
+      var free = r.status === "clean";
+      tr.className = (free && !readOnly && !checkedIn ? "pick" : "") + (room === r.number ? " chosen" : "");
+      tr.append(text("td", r.number), text("td", r.type), text("td", r.status), text("td", money(r.rate), "num"));
+      if (free && !readOnly && !checkedIn) {
+        tr.tabIndex = 0;
+        tr.setAttribute("role", "button");
+        // Named by its own cells (room, type, status, rate); the hint says what pressing does.
+        tr.title = "Assign this room";
+        tr.onclick = tr.onkeydown = function (e) {
+          if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
+          if (e.preventDefault) e.preventDefault();
+          room = r.number; render(); report(); say("Room " + r.number + " selected.");
+        };
+      }
+      tb.appendChild(tr);
+    });
+
+    var n = document.getElementById("nights");
+    n.value = String(nights); n.disabled = readOnly || checkedIn;
+    var ci = document.getElementById("checkin");
+    ci.disabled = readOnly || checkedIn || !room;
+    ci.textContent = checkedIn ? "Checked in" : "Check in";
+
+    var fb = document.getElementById("folio");
+    fb.innerHTML = "";
+    if (roomCharge()) { var tr0 = document.createElement("tr"); tr0.append(text("td", "Room " + room + " × " + nights + " night(s)"), text("td", money(roomCharge()), "num")); fb.appendChild(tr0); }
+    folio.forEach(function (f, i) {
+      var tr = document.createElement("tr");
+      var del = document.createElement("button"); del.textContent = "×"; del.setAttribute("aria-label", "Remove " + f.item); del.disabled = readOnly;
+      del.onclick = function () { folio.splice(i, 1); render(); report(); };
+      var cell = text("td", money(f.amount), "num"); cell.append(" ", del);
+      tr.append(text("td", f.item), cell);
+      fb.appendChild(tr);
+    });
+    document.getElementById("empty").hidden = folio.length > 0 || roomCharge() > 0;
+
+    var sel = document.getElementById("extra");
+    sel.innerHTML = "";
+    extras.forEach(function (x, i) { var o = text("option", x.name + " (" + money(x.price) + ")"); o.value = String(i); sel.appendChild(o); });
+    sel.disabled = readOnly || !checkedIn || extras.length === 0;
+    document.getElementById("add").disabled = sel.disabled;
+    document.getElementById("total").textContent = money(total());
+  }
+
+  document.getElementById("nights").onchange = function (e) { nights = Math.max(1, Math.min(30, Math.round(Number(e.target.value) || 1))); render(); report(); };
+  document.getElementById("checkin").onclick = function () { if (!room) return; checkedIn = true; render(); report(); say("Checked in to room " + room + "."); };
+  document.getElementById("add").onclick = function () {
+    var x = extras[Number(document.getElementById("extra").value)];
+    if (!x) return;
+    folio.push({ item: x.name, amount: x.price }); render(); report(); say(x.name + " added to the folio.");
+  };
+
+  window.addEventListener("message", function (e) {
+    if (e.source !== parent) return;
+    var m = e.data;
+    if (!m || m.type !== "exam:init" || m.version !== VERSION) return;
+    var cfg = m.config || {};
+    booking = cfg.booking || {};
+    rooms = Array.isArray(cfg.rooms) ? cfg.rooms : [];
+    extras = Array.isArray(cfg.extras) ? cfg.extras : [];
+    readOnly = !!m.readOnly;
+    var s = m.state || {};
+    room = typeof s.room === "string" ? s.room : null;
+    nights = typeof s.nights === "number" ? s.nights : (booking.nights || 1);
+    checkedIn = !!s.checkedIn;
+    folio = Array.isArray(s.folio) ? s.folio : [];
+    render();
+  });
+
+  render();
+  parent.postMessage({ type: "exam:ready", version: VERSION }, "*");
+})();
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { addExtensionAction, liveAction } from "@/app/teach/actions";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { fmtNum } from "@/engine/grading/format";
+import { useTableSignal } from "@/lib/realtime/use-table-signal";
 import type { loadLive } from "@/server/run/data";
 
 type Live = NonNullable<Awaited<ReturnType<typeof loadLive>>>;
@@ -20,7 +21,12 @@ const ago = (iso: string | null, now: number) => {
   return s < 60 ? `${s}s ago` : `${Math.floor(s / 60)}m ago`;
 };
 
-/** Who is in the exam right now. Polls every few seconds; the server is the source of truth. */
+/**
+ * Who is in the exam right now. Updates when an attempt changes (Supabase
+ * Realtime), with a slower safety poll; falls back to polling every 5 s when
+ * Realtime isn't connected. The server is the source of truth: a change
+ * event only triggers a refetch.
+ */
 export function LiveBoard({ initial }: { initial: Live }) {
   const [data, setData] = useState(initial);
   const [now, setNow] = useState(() => Date.parse(initial.now));
@@ -32,23 +38,23 @@ export function LiveBoard({ initial }: { initial: Live }) {
   useEffect(() => {
     offset.current = Date.parse(initial.now) - Date.now();
     const tick = setInterval(() => setNow(Date.now() + offset.current), 1000);
-    const poll = setInterval(async () => {
-      // Don't poll a hidden tab; it picks up on the next tick when visible.
-      if (document.hidden) return;
-      const fresh = await liveAction(initial.exam.id);
-      if (fresh) {
-        setData(fresh);
-        offset.current = Date.parse(fresh.now) - Date.now();
-      }
-    }, 5000);
-    return () => {
-      clearInterval(tick);
-      clearInterval(poll);
-    };
+    return () => clearInterval(tick);
   }, [initial]);
+
+  const refetch = useCallback(async () => {
+    const fresh = await liveAction(initial.exam.id);
+    if (fresh) {
+      setData(fresh);
+      offset.current = Date.parse(fresh.now) - Date.now();
+    }
+  }, [initial.exam.id]);
+  const status = useTableSignal({ table: "attempts", filter: `exam_id=eq.${initial.exam.id}`, onSignal: () => void refetch(), debounceMs: 1_500 });
 
   return (
     <div className="grid gap-4">
+      <p className="text-xs text-muted-foreground" role="status">
+        {status === "SUBSCRIBED" ? "Live: updates as students work." : "Updating every few seconds."}
+      </p>
       {data.attempts.length === 0 ? (
         <EmptyState>No one has started yet. This updates by itself.</EmptyState>
       ) : (
@@ -88,6 +94,7 @@ export function LiveBoard({ initial }: { initial: Live }) {
                           {a.answered}/{a.total}
                         </span>
                       </div>
+                      {a.onQuestion !== null && <div className="mt-0.5 text-xs text-muted-foreground">on question {a.onQuestion}</div>}
                     </td>
                     <td className="px-3 py-2 tabular-nums">{a.state === "in_progress" ? (left === null ? "untimed" : clock(left)) : "—"}</td>
                     <td className="px-3 py-2 text-muted-foreground">{a.state === "in_progress" ? ago(a.lastSaved, now) : ""}</td>

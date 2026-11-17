@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { difficultyLabel } from "@/engine/authoring/summary";
-import type { Blueprint, BlueprintSection, PoolItem } from "@/engine/selection/types";
+import { type Blueprint, type BlueprintSection, type PoolItem, sectionTopics } from "@/engine/selection/types";
 import type { BuilderTopic } from "./types";
 
 const LEVELS = [1, 2, 3];
@@ -32,8 +32,23 @@ export function BlueprintEditor({
   return (
     <div className="grid gap-3">
       {blueprint.sections.map((s, i) => {
-        const drawable = pool.filter((q) => q.topicId === s.topicId && q.weight > 0);
+        const ids = sectionTopics(s);
+        const drawable = pool.filter((q) => ids.includes(q.topicId) && q.weight > 0);
         const mix = s.difficultyMix;
+        const others = topics.filter((t) => t.id !== s.topicId);
+        const toggleExtra = (topicId: string, on: boolean) => {
+          const extra = (s.extraTopicIds ?? []).filter((t) => t !== topicId);
+          const next = on ? [...extra, topicId] : extra;
+          const limits = s.limits ? Object.fromEntries(Object.entries(s.limits).filter(([t]) => t === s.topicId || next.includes(t))) : undefined;
+          setSection(i, { extraTopicIds: next.length ? next : undefined, limits: next.length && limits && Object.keys(limits).length ? limits : undefined });
+        };
+        const setLimit = (topicId: string, key: "min" | "max", raw: string) => {
+          const value = raw === "" ? undefined : Math.max(0, Math.floor(Number(raw)) || 0);
+          const current = { ...(s.limits?.[topicId] ?? {}), [key]: value };
+          const limits = { ...(s.limits ?? {}), [topicId]: current };
+          if (current.min === undefined && current.max === undefined) delete limits[topicId];
+          setSection(i, { limits: Object.keys(limits).length ? limits : undefined });
+        };
         return (
           <fieldset key={i} disabled={disabled} className="grid gap-3 rounded-lg border p-4">
             <legend className="sr-only">Section {i + 1}</legend>
@@ -52,7 +67,13 @@ export function BlueprintEditor({
                 className="w-auto min-w-48 flex-1"
                 aria-label={`Section ${i + 1} topic`}
                 value={s.topicId}
-                onChange={(e) => setSection(i, { topicId: e.target.value })}
+                onChange={(e) =>
+                  setSection(i, {
+                    topicId: e.target.value,
+                    extraTopicIds: s.extraTopicIds?.filter((t) => t !== e.target.value).length ? s.extraTopicIds.filter((t) => t !== e.target.value) : undefined,
+                    limits: undefined,
+                  })
+                }
               >
                 {topics.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -75,10 +96,46 @@ export function BlueprintEditor({
               </Button>
             </div>
 
+            {others.length > 0 && (
+              <details open={Boolean(s.extraTopicIds?.length)}>
+                <summary className="cursor-pointer text-sm">Also draw from other topics{s.extraTopicIds?.length ? ` (${s.extraTopicIds.length})` : ""}</summary>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {others.map((t) => (
+                    <label key={t.id} className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" className="accent-foreground" checked={s.extraTopicIds?.includes(t.id) ?? false} onChange={(e) => toggleExtra(t.id, e.target.checked)} />
+                      {t.name}
+                    </label>
+                  ))}
+                </div>
+                {ids.length > 1 && !mix && (
+                  <div className="mt-3 grid gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      One lottery across these topics. Optionally make sure each topic gets at least, or no more than, a number of
+                      questions. Minimums are drawn first, then the rest by rank.
+                    </p>
+                    {ids.map((t) => {
+                      const name = topics.find((x) => x.id === t)?.name ?? t;
+                      const available = drawable.filter((q) => q.topicId === t).length;
+                      return (
+                        <div key={t} className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="min-w-40">
+                            {name} <span className="text-xs text-muted-foreground">({available} available)</span>
+                          </span>
+                          <Input type="number" min={0} className="w-20" placeholder="min" aria-label={`At least this many from ${name}`} value={s.limits?.[t]?.min ?? ""} onChange={(e) => setLimit(t, "min", e.target.value)} />
+                          <Input type="number" min={0} className="w-20" placeholder="max" aria-label={`At most this many from ${name}`} value={s.limits?.[t]?.max ?? ""} onChange={(e) => setLimit(t, "max", e.target.value)} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </details>
+            )}
+
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 className="accent-foreground"
+                disabled={Boolean(s.limits)}
                 checked={Boolean(mix)}
                 onChange={(e) =>
                   setSection(

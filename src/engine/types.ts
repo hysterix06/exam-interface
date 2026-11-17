@@ -47,3 +47,16 @@ export interface PreflightIssue {
   /** Where in the definition, e.g. "options[2].text". */
   path?: string;
 }
+
+/**
+ * How a number shown to an educator was worked out, as data: the UI renders
+ * it next to the number ("every number is clickable"), never re-derives it.
+ */
+export interface Explanation {
+  /** The rule in words, e.g. "Sum of graded scores ÷ number of graded attempts". */
+  formula: string;
+  /** The actual values that went in, in reading order. */
+  inputs: { label: string; value: string }[];
+  /** Optional caveat, e.g. "Below 30 students the number is wobbly." */
+  note?: string;
+}

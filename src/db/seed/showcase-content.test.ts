@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { expectedKeyScore } from "@/engine/grading/expect";
 import { createRng } from "@/engine/rng";
 import { getQuestionType } from "@/question-types/registry";
 import { SHOWCASE_QUESTIONS } from "./showcase-content";
@@ -18,7 +19,7 @@ describe("showcase seed content", () => {
     for (const seed of ["a", "b", "c"]) {
       const { instance } = type.generate(def, createRng(seed));
       const r = type.grade(instance, type.keyResponse(instance), { points: q.points });
-      expect(r.score).toBe(type.manual ? 0 : q.points);
+      expect(r.score).toBe(expectedKeyScore(r, q.points));
     }
   });
 });

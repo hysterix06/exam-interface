@@ -1,5 +1,7 @@
 "use client";
 
+import { withFormatHint } from "../hints";
+import { Prose } from "@/components/ui/prose";
 import { useId } from "react";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -39,7 +41,7 @@ export const numericUi: QuestionTypeUi<NumericDef, StudentInstance, NumericRespo
 
     return (
       <div className="grid gap-5">
-        <Field label="Question" hint="Use {name} where a variable's value should appear, e.g. “{n} notebooks at ${price} each”.">
+        <Field label="Question" hint={withFormatHint("Use {name} where a variable's value should appear, e.g. “{n} notebooks at ${price} each”.")}>
           <Textarea value={def.stem} onChange={(e) => set({ stem: e.target.value })} />
         </Field>
 
@@ -152,6 +154,42 @@ export const numericUi: QuestionTypeUi<NumericDef, StudentInstance, NumericRespo
             />
           </Field>
         </div>
+
+        <div className="grid gap-3 rounded-md border p-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="accent-foreground"
+              checked={def.sigFigs !== undefined}
+              onChange={(e) => set({ sigFigs: e.target.checked ? { count: 3, weight: 0.25 } : undefined })}
+            />
+            Also mark significant figures
+          </label>
+          {def.sigFigs && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Significant figures" hint="The correctly rounded value is accepted even with an exact tolerance.">
+                <Input
+                  type="number"
+                  min={1}
+                  max={15}
+                  step={1}
+                  value={def.sigFigs.count}
+                  onChange={(e) => set({ sigFigs: { ...def.sigFigs!, count: Math.max(1, Math.min(15, Math.round(Number(e.target.value) || 1))) } })}
+                />
+              </Field>
+              <Field label="Share of the points (%)" hint="e.g. 25: three quarters for the value, one quarter for the figures.">
+                <Input
+                  type="number"
+                  min={1}
+                  max={99}
+                  step={1}
+                  value={Math.round(def.sigFigs.weight * 100)}
+                  onChange={(e) => set({ sigFigs: { ...def.sigFigs!, weight: Math.max(1, Math.min(99, Number(e.target.value) || 25)) / 100 } })}
+                />
+              </Field>
+            </div>
+          )}
+        </div>
       </div>
     );
   },
@@ -160,7 +198,7 @@ export const numericUi: QuestionTypeUi<NumericDef, StudentInstance, NumericRespo
     const stemId = useId();
     return (
       <div className="grid gap-4">
-        <p id={stemId} className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <Prose id={stemId} className="text-base">{instance.stem}</Prose>
         <Input
           aria-label="Your answer"
           aria-describedby={stemId}

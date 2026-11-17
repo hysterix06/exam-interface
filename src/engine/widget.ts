@@ -29,6 +29,12 @@ export const WIDGETS: readonly WidgetInfo[] = [
     description: "A small till. The student rings up an order and applies a discount; the widget reports the order and total.",
     src: "/widgets/pos-demo.html",
   },
+  {
+    id: "pms-demo",
+    label: "Front desk (hotel) demo",
+    description: "A property-management screen. The student checks a guest into a suitable clean room for the right nights and posts extras to the folio; the widget reports the room, nights and balance.",
+    src: "/widgets/pms-demo.html",
+  },
 ];
 
 export const widgetById = (id: string) => WIDGETS.find((w) => w.id === id);

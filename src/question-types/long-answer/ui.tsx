@@ -1,12 +1,12 @@
 "use client";
 
+import { withFormatHint } from "../hints";
+import { Prose } from "@/components/ui/prose";
 import { useId } from "react";
-import { Plus, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { nextOptionId } from "../choice-ui";
+import { RubricEditor } from "../rubric-ui";
 import type { QuestionTypeUi } from "../ui-types";
 import { type LongAnswerDef, type LongAnswerInstance, type LongAnswerResponse, wordCount } from "./core";
 
@@ -25,46 +25,14 @@ export const longAnswerUi: QuestionTypeUi<LongAnswerDef, StudentInstance, LongAn
 
   Editor({ def, onChange }) {
     const set = (patch: Partial<LongAnswerDef>) => onChange({ ...def, ...patch });
-    const setCriterion = (id: string, patch: Partial<LongAnswerDef["rubric"][number]>) =>
-      set({ rubric: def.rubric.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
-    const total = def.rubric.reduce((s, c) => s + c.points, 0);
 
     return (
       <div className="grid gap-5">
-        <Field label="Question">
+        <Field label="Question" hint={withFormatHint()}>
           <Textarea value={def.stem} onChange={(e) => set({ stem: e.target.value })} />
         </Field>
 
-        <div className="grid gap-2">
-          <span className="text-sm font-medium">Rubric</span>
-          <p className="text-xs text-muted-foreground">
-            What earns marks. A grader ticks each criterion that is met; weights are scaled to the question&apos;s points
-            {total > 0 ? ` (${def.rubric.length} criteria, ${total} rubric points).` : "."}
-          </p>
-          {def.rubric.map((c, i) => (
-            <div key={c.id} className="flex items-center gap-2">
-              <Input value={c.text} placeholder={`Criterion ${i + 1}`} aria-label={`Criterion ${i + 1}`} onChange={(e) => setCriterion(c.id, { text: e.target.value })} />
-              <Input
-                className="w-20"
-                type="number"
-                min={0}
-                step="any"
-                aria-label={`Criterion ${i + 1} weight`}
-                title="Weight"
-                value={c.points}
-                onChange={(e) => setCriterion(c.id, { points: Number(e.target.value) })}
-              />
-              <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove criterion ${i + 1}`} onClick={() => set({ rubric: def.rubric.filter((x) => x.id !== c.id) })}>
-                <X />
-              </Button>
-            </div>
-          ))}
-          <div>
-            <Button type="button" variant="outline" size="sm" onClick={() => set({ rubric: [...def.rubric, { id: nextOptionId(def.rubric.map((c) => ({ id: c.id, text: c.text }))), text: "", points: 1 }] })}>
-              <Plus /> Add criterion
-            </Button>
-          </div>
-        </div>
+        <RubricEditor rubric={def.rubric} onChange={(rubric) => set({ rubric })} />
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Word limit (optional)" hint="Shown to students as a counter. Not enforced.">
@@ -93,7 +61,7 @@ export const longAnswerUi: QuestionTypeUi<LongAnswerDef, StudentInstance, LongAn
     const over = instance.maxWords !== null && words > instance.maxWords;
     return (
       <div className="grid gap-3">
-        <p id={stemId} className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <Prose id={stemId} className="text-base">{instance.stem}</Prose>
         <Textarea
           aria-label="Your answer"
           aria-describedby={stemId}

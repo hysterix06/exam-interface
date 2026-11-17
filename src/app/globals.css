@@ -119,3 +119,46 @@
     background: color-mix(in oklch, var(--brand) 18%, transparent);
   }
 }
+
+/* Question text (Markdown + maths): restrained, no decoration beyond structure. */
+@layer components {
+  .prose-exam > * + * {
+    margin-top: 0.75em;
+  }
+  .prose-exam strong {
+    font-weight: 600;
+  }
+  .prose-exam code {
+    @apply rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.9em];
+  }
+  .prose-exam pre {
+    @apply overflow-x-auto rounded-md bg-muted p-3 text-sm;
+  }
+  .prose-exam pre code {
+    @apply bg-transparent p-0;
+  }
+  .prose-exam ul {
+    @apply list-disc pl-6;
+  }
+  .prose-exam ol {
+    @apply list-decimal pl-6;
+  }
+  .prose-exam blockquote {
+    @apply border-l-2 pl-4 text-muted-foreground;
+  }
+  .prose-exam table {
+    @apply w-full border-collapse text-sm;
+  }
+  .prose-exam th,
+  .prose-exam td {
+    @apply border px-2 py-1 text-left;
+  }
+  .prose-exam h1,
+  .prose-exam h2,
+  .prose-exam h3 {
+    @apply font-semibold tracking-tight;
+  }
+  .prose-exam .katex-display {
+    @apply overflow-x-auto overflow-y-hidden py-1;
+  }
+}

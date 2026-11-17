@@ -131,3 +131,42 @@ describe("validateDef", () => {
     expect(numeric.validateDef(def({ constraints: ["a == 1"] })).map((i) => i.code)).toEqual(["numeric.many-retries"]);
   });
 });
+
+describe("significant figures", () => {
+  const sf = def({ stem: "{a} / {b}?", answer: "a / b", constraints: ["b != 3"], sigFigs: { count: 3, weight: 0.25 } });
+  const inst = { stem: "", answer: 2 / 7, abs: 0, rel: 0, working: "", sigFigs: { count: 3, weight: 0.25 } };
+
+  it("splits the points: value, then figures", () => {
+    const r = numeric.grade(inst, { text: "0.286" }, { points: 4 });
+    expect(r.lines.map((l) => [l.label, l.verdict, l.points, l.max])).toEqual([
+      ["Answer", "correct", 3, 3],
+      ["Significant figures", "correct", 1, 1],
+    ]);
+    expect(r.score).toBe(4);
+  });
+
+  it("gives the value but not the figures for an unrounded answer", () => {
+    const r = numeric.grade(inst, { text: String(2 / 7) }, { points: 4 });
+    expect(r.lines.map((l) => l.verdict)).toEqual(["correct", "wrong"]);
+    expect(r.score).toBe(3);
+  });
+
+  it("gives the figures but not the value for a wrong number of the right shape", () => {
+    const r = numeric.grade(inst, { text: "0.300" }, { points: 4 });
+    expect(r.lines.map((l) => l.verdict)).toEqual(["wrong", "correct"]);
+  });
+
+  it("explains ambiguous trailing zeros and counts both lines as unanswered when blank", () => {
+    const big = { ...inst, answer: 1200 };
+    const r = numeric.grade(big, { text: "1200" }, { points: 4 });
+    expect(r.lines[1].note).toMatch(/could be significant or not/);
+    expect(numeric.grade(inst, null, { points: 4 }).lines.map((l) => l.verdict)).toEqual(["unanswered", "unanswered"]);
+  });
+
+  it("keys to the rounded figure and stays out of older instances", () => {
+    expect(numeric.keyResponse(inst)).toEqual({ text: "0.286" });
+    const { instance } = numeric.generate(def(), createRng("x"));
+    expect(instance).not.toHaveProperty("sigFigs");
+    expect(numeric.generate(sf, createRng("x")).instance).toHaveProperty("sigFigs");
+  });
+});

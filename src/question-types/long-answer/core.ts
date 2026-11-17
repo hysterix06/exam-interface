@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { fmtNum, roundScore } from "@/engine/grading/format";
+import { markRubric, pendingRubric, rubricCriteria } from "@/engine/grading/rubric";
 import { defineQuestionType } from "@/engine/question-type";
-import type { GradeLine, GradeResult, PreflightIssue } from "@/engine/types";
+import type { GradeResult, PreflightIssue } from "@/engine/types";
 
 const criterionSchema = z.object({ id: z.string().min(1), text: z.string(), points: z.number() });
 
@@ -35,28 +35,12 @@ export function keywordHits(text: string, keywords: readonly string[]) {
   return { found, missing: keywords.filter((k) => k.trim() && !found.includes(k)) };
 }
 
-const totalWeight = (inst: LongAnswerInstance) => inst.rubric.reduce((s, c) => s + c.points, 0);
-
 /**
  * The human's marking, as data: the ticked criteria become grade lines whose
  * points are each criterion's share of the question's points.
  */
 export function gradeRubric(inst: LongAnswerInstance, ticked: readonly string[], points: number): GradeResult {
-  const total = totalWeight(inst) || 1;
-  const set = new Set(ticked);
-  const lines = inst.rubric.map((c): GradeLine => {
-    const max = (points * c.points) / total;
-    const ok = set.has(c.id);
-    return {
-      label: c.text,
-      expected: `${fmtNum(c.points)} of ${fmtNum(total)} rubric points`,
-      got: ok ? "met" : "not met",
-      verdict: ok ? "correct" : "wrong",
-      points: ok ? max : 0,
-      max,
-    };
-  });
-  return { score: roundScore(lines.reduce((s, l) => s + l.points, 0)), max: points, needsReview: false, lines };
+  return markRubric(inst.rubric, ticked, points);
 }
 
 export const longAnswer = defineQuestionType<LongAnswerDef, LongAnswerInstance, LongAnswerResponse>({
@@ -73,22 +57,30 @@ export const longAnswer = defineQuestionType<LongAnswerDef, LongAnswerInstance, 
   }),
 
   grade(inst, response, { points }) {
-    const total = totalWeight(inst) || 1;
-    const answered = (response?.text ?? "").trim() !== "";
-    const lines = inst.rubric.map((c): GradeLine => ({
-      label: c.text,
-      expected: `${fmtNum(c.points)} of ${fmtNum(total)} rubric points`,
-      got: answered ? "awaiting a grader" : "no answer",
-      verdict: answered ? "review" : "unanswered",
-      points: 0,
-      max: (points * c.points) / total,
-    }));
-    return { score: 0, max: points, needsReview: answered, lines };
+    return pendingRubric(inst.rubric, (response?.text ?? "").trim() !== "", points);
+  },
+
+  review: {
+    criteria: (inst, points) => rubricCriteria(inst.rubric, points),
+    mark: (inst, _response, ticked, { points }) => gradeRubric(inst, ticked.filter((id) => inst.rubric.some((c) => c.id === id)), points),
+    aids(inst, response) {
+      const text = response?.text ?? "";
+      const n = wordCount(text);
+      const notes = [`${n} ${n === 1 ? "word" : "words"}${inst.maxWords ? ` (limit ${inst.maxWords})` : ""}`];
+      if (inst.keywords.length) {
+        const hits = keywordHits(text, inst.keywords);
+        notes.push(`Keywords found: ${hits.found.length ? hits.found.join(", ") : "none"}${hits.missing.length ? `; not found: ${hits.missing.join(", ")}` : ""}`);
+      }
+      return { text, keywords: inst.keywords, notes };
+    },
   },
 
   keyResponse: (inst) => ({ text: `A complete answer covering: ${inst.rubric.map((c) => c.text).join("; ")}.` }),
 
   randomResponse: (_inst, rng) => ({ text: Array.from({ length: rng.int(5, 40) }, () => "word").join(" ") }),
+
+  // About 20 words a minute when writing to a limit; ten minutes otherwise.
+  estimateSeconds: (def) => (def.maxWords ? Math.max(120, def.maxWords * 3) : 600),
 
   validateDef(def) {
     const issues: PreflightIssue[] = [];

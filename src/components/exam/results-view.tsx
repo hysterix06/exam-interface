@@ -26,12 +26,18 @@ export function ResultsView({
   pendingReview,
   items,
   mastery,
+  objectives,
+  latePenalty,
 }: {
   score: number;
   max: number;
   pendingReview: boolean;
   items: ResultItem[];
   mastery?: { topics: TopicMastery[]; weakest: string | null };
+  /** Points per learning objective, when the questions are tagged with them. */
+  objectives?: { topics: TopicMastery[]; weakest: string | null };
+  /** Points taken off for submitting late, with the working. */
+  latePenalty?: { explanation: string; points: number } | null;
 }) {
   const pct = max > 0 ? Math.round((score / max) * 100) : 0;
   return (
@@ -42,6 +48,7 @@ export function ResultsView({
           {fmtNum(score)} <span className="text-muted-foreground">/ {fmtNum(max)}</span>
           <span className="ml-3 text-xl text-muted-foreground">{pct}%</span>
         </p>
+        {latePenalty && latePenalty.points > 0 && <p className="mt-2 text-sm text-warning">{latePenalty.explanation}</p>}
         {pendingReview && (
           <p className="mt-2 text-sm text-muted-foreground">
             Some answers still need to be marked by your instructor, so this score may change.
@@ -50,6 +57,7 @@ export function ResultsView({
       </section>
 
       {mastery && <TopicBreakdown topics={mastery.topics} weakest={mastery.weakest} />}
+      {objectives && <TopicBreakdown title="By learning objective" topics={objectives.topics} weakest={null} min={1} />}
 
       {items.some((i) => i.lines) && (
         <ol className="grid gap-6">

@@ -7,7 +7,7 @@ const submitted = new Date("2026-11-01T09:20:00Z");
 describe("summaryRows", () => {
   it("keeps the original eight columns first, then the audit columns", () => {
     expect(SUMMARY_HEADER.slice(0, 8)).toEqual(["Student", "Email", "Status", "Score", "Out of", "Percent", "Started", "Submitted"]);
-    expect(SUMMARY_HEADER.slice(8)).toEqual(["Extra time", "Tab switches", "Pastes", "Attempt ID", "Seed"]);
+    expect(SUMMARY_HEADER.slice(8)).toEqual(["Extra time", "Tab switches", "Pastes", "Attempt ID", "Seed", "Minutes late", "Late penalty (points)"]);
   });
 
   it("writes one row per attempt with percent, extensions and signals", () => {
@@ -25,9 +25,10 @@ describe("summaryRows", () => {
         extensions: [{ kind: "minutes", value: 10 }, { kind: "multiplier", value: 1.25 }],
         blurs: 2,
         pastes: 0,
+        latePenalty: { minutes: 3, points: 0.42 },
       },
     ]);
-    expect(row).toEqual(["Sam", "s@x", "graded", 7, 8, 87.5, started.toISOString(), submitted.toISOString(), "+10 min; ×1.25 time", 2, 0, "a1", "seed-1"]);
+    expect(row).toEqual(["Sam", "s@x", "graded", 7, 8, 87.5, started.toISOString(), submitted.toISOString(), "+10 min; ×1.25 time", 2, 0, "a1", "seed-1", 3, 0.42]);
     expect(row).toHaveLength(SUMMARY_HEADER.length);
   });
 

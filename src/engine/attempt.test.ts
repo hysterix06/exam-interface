@@ -1,14 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { expectedKeyScore, keyNeedsReview } from "@/engine/grading/expect";
 import { getQuestionType } from "@/question-types/registry";
 import { fixturesByType } from "@/question-types/fixtures";
 import { type AttemptPoolItem, buildAttempt } from "./attempt";
 import type { Blueprint } from "./selection/types";
 
 // One pool entry per fixture, spread over two topics.
-// Human-graded types can't score full marks by machine, so they sit this one out.
-const POOL: AttemptPoolItem[] = Object.entries(fixturesByType)
-  .filter(([type]) => !getQuestionType(type).manual)
-  .flatMap(([type, defs]) =>
+const POOL: AttemptPoolItem[] = Object.entries(fixturesByType).flatMap(([type, defs]) =>
   defs.map((def, i) => ({
     id: `${type}-${i}`,
     versionId: `${type}-${i}-v1`,
@@ -54,14 +52,15 @@ describe("buildAttempt", () => {
     }
   });
 
-  it("scores 100% for a perfect student on every seed", () => {
+  it("gives a perfect student every machine-marked point on every seed", () => {
     for (let s = 0; s < 200; s++) {
       const { items } = buildAttempt(`perfect-${s}`, BLUEPRINT, POOL);
-      const total = items.reduce((sum, item) => {
+      for (const item of items) {
         const type = getQuestionType(item.type);
-        return sum + type.grade(item.instance, type.keyResponse(item.instance), { points: item.points }).score;
-      }, 0);
-      expect(total).toBe(12);
+        const r = type.grade(item.instance, type.keyResponse(item.instance), { points: item.points });
+        expect(r.score).toBe(expectedKeyScore(r, item.points));
+        if (!keyNeedsReview(r)) expect(r.score).toBe(item.points);
+      }
     }
   });
 

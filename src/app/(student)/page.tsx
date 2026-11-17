@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { RefreshOnChange } from "@/components/exam/refresh-on-change";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { examMeta } from "@/components/exam/exam-meta";
@@ -69,6 +70,7 @@ export default async function StudentHome() {
 
   return (
     <>
+      <RefreshOnChange boundaries={exams.flatMap((e) => [e.opensAt, e.closesAt])} />
       <h1 className="mb-8 text-2xl font-semibold tracking-tight">{first ? `Hi, ${first}` : "Your exams"}</h1>
 
       {courses.length === 0 ? (

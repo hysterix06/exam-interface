@@ -1,4 +1,6 @@
 "use client";
+import { withFormatHint } from "../hints";
+import { Prose } from "@/components/ui/prose";
 import { useId } from "react";
 
 import { Field } from "@/components/ui/field";
@@ -34,7 +36,7 @@ export const mcqUi: QuestionTypeUi<McqDef, StudentInstance, McqResponse> = {
       });
     return (
       <div className="grid gap-5">
-        <Field label="Question" hint="What the student reads. Plain text for now.">
+        <Field label="Question" hint={withFormatHint("What the student reads.")}>
           <Textarea value={def.stem} onChange={(e) => set({ stem: e.target.value })} />
         </Field>
 
@@ -135,7 +137,7 @@ export const mcqUi: QuestionTypeUi<McqDef, StudentInstance, McqResponse> = {
     const selected = value?.selected ?? [];
     return (
       <div className="grid gap-4">
-        <p id={stemId} className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <Prose id={stemId} className="text-base">{instance.stem}</Prose>
         {instance.multiple ? <p className="text-xs text-muted-foreground">Select all that apply.</p> : null}
         <ChoiceList
           options={instance.options}

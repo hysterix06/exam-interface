@@ -1,23 +1,13 @@
 import { z } from "zod";
 import { quote, roundScore } from "@/engine/grading/format";
+import { WRONG_TEXT } from "@/engine/grading/text";
 import { defineQuestionType } from "@/engine/question-type";
-import { evaluateSheet, formulaFunctions, inGrid, isSheetFunction, MAX_COLS, MAX_ROWS, parseAddr, sameValue, showValue } from "@/engine/sheet";
-import type { GradeLine, PreflightIssue } from "@/engine/types";
+import { evaluateSheet, formulaFunctions, inGrid, isSheetFunction, MAX_COLS, MAX_ROWS, parseAddr } from "@/engine/sheet";
+import { both, gradeSheetChecks, requiredFunctions, sheetCheckSchema } from "@/engine/sheet-checks";
+import type { PreflightIssue } from "@/engine/types";
 
-const checkSchema = z.object({
-  id: z.string().min(1),
-  cell: z.string(),
-  label: z.string(),
-  abs: z.number().min(0).optional(),
-  rel: z.number().min(0).optional(),
-  /** The student must have typed a formula (=...) in this cell, not just a number. */
-  requireFormula: z.boolean().default(false),
-  /** The formula must call each of these functions (e.g. SUM). Implies a formula. */
-  functions: z.array(z.string()).optional(),
-});
-
-const required = (c: { functions?: string[] }) => (c.functions ?? []).map((f) => f.trim().toUpperCase()).filter(Boolean);
-const both = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
+const checkSchema = sheetCheckSchema;
+const required = requiredFunctions;
 
 const defSchema = z.object({
   stem: z.string(),
@@ -59,33 +49,15 @@ export const spreadsheet = defineQuestionType<SpreadsheetDef, SpreadsheetInstanc
 
   grade(inst, response, { points }) {
     const entries = response?.cells ?? {};
-    const share = inst.checks.length ? points / inst.checks.length : points;
-    const answered = inst.inputs.some((a) => (entries[a] ?? "").trim() !== "");
-
-    const key = evaluateSheet(inst.rows, inst.cols, merged(inst, inst.solution)).values;
-    const mine = evaluateSheet(inst.rows, inst.cols, merged(inst, entries)).values;
-
-    const lines = inst.checks.map((c): GradeLine => {
-      const tol = { abs: c.abs, rel: c.rel };
-      const fns = required(c);
-      const expected = `${showValue(key[c.cell])}${fns.length ? ` (a formula using ${both(fns)})` : c.requireFormula ? " (typed as a formula)" : ""}`;
-      if (!answered) return { label: c.label, expected, got: "no answer", verdict: "unanswered", points: 0, max: share };
-
-      const got = showValue(mine[c.cell]);
-      const valueOk = sameValue(key[c.cell] ?? null, mine[c.cell] ?? null, tol);
-      const typed = (entries[c.cell] ?? "").trim();
-      const formulaOk = !(c.requireFormula || fns.length > 0) || typed.startsWith("=");
-      const used = formulaFunctions(typed);
-      const fnsOk = fns.every((f) => used.includes(f));
-      const ok = valueOk && formulaOk && fnsOk;
-      const note = !valueOk
-        ? `Cell ${c.cell} shows ${got}.`
-        : !formulaOk
-          ? `The value is right, but ${c.cell} was typed in by hand. This check needs a formula.`
-          : !fnsOk
-            ? `The value is right, but ${c.cell} must use ${both(fns)}; it uses ${used.length ? both(used) : "no function"}.`
-            : `Cell ${c.cell} shows ${got}.`;
-      return { label: c.label, expected, got, verdict: ok ? "correct" : "wrong", points: ok ? share : 0, max: share, note };
+    const lines = gradeSheetChecks({
+      rows: inst.rows,
+      cols: inst.cols,
+      checks: inst.checks,
+      keyCells: merged(inst, inst.solution),
+      studentCells: merged(inst, entries),
+      typed: entries,
+      answered: inst.inputs.some((a) => (entries[a] ?? "").trim() !== ""),
+      points,
     });
     return { score: roundScore(lines.reduce((s, l) => s + l.points, 0)), max: points, needsReview: false, lines };
   },
@@ -96,6 +68,11 @@ export const spreadsheet = defineQuestionType<SpreadsheetDef, SpreadsheetInstanc
     if (rng.next() < 0.33) return { cells: { ...inst.solution } };
     return { cells: Object.fromEntries(inst.inputs.map((a) => [a, String(rng.int(0, 99))])) };
   },
+
+  // Text in every student cell: no number or formula check can pass.
+  wrongResponse: (inst) => ({ cells: Object.fromEntries(inst.inputs.map((a) => [a, WRONG_TEXT])) }),
+
+  estimateSeconds: (def) => 60 + 60 * def.checks.length,
 
   validateDef(def) {
     const issues: PreflightIssue[] = [];

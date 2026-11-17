@@ -10,6 +10,7 @@ import { Section } from "@/components/ui/section";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { Table, TD, TH, THead, TR } from "@/components/ui/table";
 import { fmtNum } from "@/engine/grading/format";
+import { averagePercent, medianPercent } from "@/engine/stats";
 import { percent } from "@/lib/format";
 import { listExamAttempts, listExamHistory } from "@/server/run/data";
 import { workspaceExam } from "@/server/teach/exam";
@@ -22,13 +23,6 @@ const STATE: Record<string, { label: string; tone: "neutral" | "warning" | "stro
   graded: { label: "Graded", tone: "strong" },
 };
 
-function median(xs: number[]) {
-  if (xs.length === 0) return null;
-  const s = [...xs].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-}
-
 export default async function ResultsPage({ params }: PageProps<"/teach/exams/[id]/results">) {
   const { id } = await params;
   const { scope, exam } = await workspaceExam(id);
@@ -37,6 +31,8 @@ export default async function ResultsPage({ params }: PageProps<"/teach/exams/[i
 
   const graded = rows.filter((r) => r.state === "graded");
   const pcts = graded.map((r) => percent(r.score, r.maxScore)).filter((p): p is number => p !== null);
+  const average = averagePercent(pcts);
+  const median = medianPercent(pcts);
   const toMark = rows.filter((r) => r.state === "submitted").length;
   const base = `/teach/exams/${id}`;
 
@@ -44,8 +40,8 @@ export default async function ResultsPage({ params }: PageProps<"/teach/exams/[i
     <>
       <StatGrid className="mb-10">
         <Stat label="Attempts" value={rows.length} />
-        <Stat label="Average" value={pcts.length ? `${Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length)}%` : "—"} hint={pcts.length ? `${graded.length} graded` : undefined} />
-        <Stat label="Median" value={pcts.length ? `${Math.round(median(pcts)!)}%` : "—"} />
+        <Stat label="Average" value={average ? `${Math.round(average.value)}%` : "—"} hint={pcts.length ? `${graded.length} graded` : undefined} explain={average?.explanation} />
+        <Stat label="Median" value={median ? `${Math.round(median.value)}%` : "—"} explain={median?.explanation} />
         <Stat label="To mark" value={toMark} href={toMark ? `/teach/marking/${id}` : undefined} />
       </StatGrid>
 
@@ -59,6 +55,12 @@ export default async function ResultsPage({ params }: PageProps<"/teach/exams/[i
               </Button>
               <Button asChild variant="ghost" size="sm">
                 <Link href={`${base}/results/regrade`}>Regrade</Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link href={`${base}/results/signals`}>Signals</Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link href={`${base}/results/print`}>Print all</Link>
               </Button>
               <Button asChild variant="ghost" size="sm">
                 <a href={`${base}/export?format=items`}>Answers CSV</a>

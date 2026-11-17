@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { roundScore } from "@/engine/grading/format";
+import { gradePairs } from "@/engine/grading/pairs";
 import { defineQuestionType } from "@/engine/question-type";
-import type { GradeLine, PreflightIssue } from "@/engine/types";
+import type { PreflightIssue } from "@/engine/types";
 
 const pairSchema = z.object({ id: z.string().min(1), left: z.string(), right: z.string() });
 
@@ -53,35 +53,37 @@ export const matching = defineQuestionType<MatchingDef, MatchingInstance, Matchi
   },
 
   grade(inst, response, { points }) {
-    const matches = response?.matches ?? {};
     const textOf = (id: string) => inst.rights.find((r) => r.id === id)?.text ?? id;
-    const share = points / inst.lefts.length;
-    const answered = inst.lefts.some((l) => matches[l.id]);
-
-    const lines = inst.lefts.map((l): GradeLine => {
-      const got = matches[l.id];
-      const expected = textOf(inst.key[l.id]);
-      if (!answered || !got) {
-        return { label: l.text, expected, got: "no answer", verdict: "unanswered", points: 0, max: share };
-      }
-      const ok = got === inst.key[l.id];
-      return {
-        label: l.text,
-        expected,
-        got: textOf(got),
-        verdict: ok ? "correct" : "wrong",
-        points: ok ? share : 0,
-        max: share,
-      };
+    return gradePairs({
+      rows: inst.lefts.map((l) => ({ id: l.id, label: l.text, expectedId: inst.key[l.id] })),
+      given: response?.matches ?? {},
+      textOf,
+      points,
     });
-    const score = roundScore(lines.reduce((s, l) => s + l.points, 0));
-    return { score, max: points, needsReview: false, lines };
   },
 
   keyResponse: (inst) => ({ matches: { ...inst.key } }),
 
   randomResponse(inst, rng) {
     return { matches: Object.fromEntries(inst.lefts.map((l) => [l.id, rng.pick(inst.rights).id])) };
+  },
+
+  // Each left gets the next left's answer: with two or more pairs, every match is wrong.
+  wrongResponse(inst) {
+    const n = inst.lefts.length;
+    if (n < 2) return null;
+    return { matches: Object.fromEntries(inst.lefts.map((l, i) => [l.id, inst.key[inst.lefts[(i + 1) % n].id]])) };
+  },
+
+  estimateSeconds: (def) => 20 + 15 * def.pairs.length,
+
+  analysisTokens: (_inst, r) => Object.entries(r.matches).filter(([, v]) => v).map(([l, v]) => `${l}=${v}`),
+  tokenUniverse(inst) {
+    const rights = new Map(inst.rights.map((r) => [r.id, r.text]));
+    return {
+      tokens: inst.lefts.flatMap((l) => inst.rights.map((r) => ({ id: `${l.id}=${r.id}`, text: `${l.text} → ${rights.get(r.id)}` }))),
+      key: inst.lefts.map((l) => `${l.id}=${inst.key[l.id]}`),
+    };
   },
 
   validateDef(def) {

@@ -30,9 +30,19 @@ export default async function ExamInfoPage({ params }: PageProps<"/exams/[id]">)
     ["Questions", exam.questionCount],
     ["Time", s.timeLimitMinutes ? `${s.timeLimitMinutes} minutes, from when you start` : "No time limit"],
     ["Attempts", s.attemptsAllowed === 1 ? "One" : `${s.attemptsAllowed} (${exam.attemptsLeft} left)`],
-    ["Moving around", s.oneWayNavigation ? "One way: you can’t go back to a question" : "Go back and change answers any time"],
+    [
+      "Moving around",
+      s.questionTimeLimitSeconds
+        ? `One way, ${s.questionTimeLimitSeconds} seconds per question: each question closes when its time is up`
+        : s.oneWayNavigation
+          ? "One way: you can’t go back to a question"
+          : "Go back and change answers any time",
+    ],
     ["Afterwards you’ll see", RELEASE_LABELS[s.release]],
   ];
+  if (s.timeLimitMinutes && s.late.mode === "accept") {
+    rules.push(["Running over", `You can keep going for up to ${s.late.windowMinutes} minutes, losing ${s.late.penaltyPercentPerMinute}% of your points per minute late (at most ${s.late.maxPenaltyPercent}%)`]);
+  }
   if (exam.opensAt) rules.push(["Opens", <LocalTime key="o" iso={exam.opensAt} />]);
   if (exam.closesAt) rules.push(["Closes", <LocalTime key="c" iso={exam.closesAt} />]);
   if (exam.topics.length) rules.push(["Covers", exam.topics.join(", ")]);

@@ -21,6 +21,8 @@ export interface SummaryInput {
   extensions: readonly ExtensionLike[];
   blurs: number;
   pastes: number;
+  /** Set when the attempt was accepted late under the exam's late policy. */
+  latePenalty?: { minutes: number; points: number } | null;
 }
 
 export interface ItemInput {
@@ -39,7 +41,7 @@ export interface ItemInput {
 }
 
 // The first eight columns predate the rest; keep them first so old sheets still line up.
-export const SUMMARY_HEADER = ["Student", "Email", "Status", "Score", "Out of", "Percent", "Started", "Submitted", "Extra time", "Tab switches", "Pastes", "Attempt ID", "Seed"];
+export const SUMMARY_HEADER = ["Student", "Email", "Status", "Score", "Out of", "Percent", "Started", "Submitted", "Extra time", "Tab switches", "Pastes", "Attempt ID", "Seed", "Minutes late", "Late penalty (points)"];
 
 export const ITEM_HEADER = ["Student", "Email", "Attempt ID", "Question #", "Question", "Topic", "Version", "Score", "Out of", "Graded by", "Needs marking", "Score changed by hand"];
 
@@ -62,6 +64,8 @@ export function summaryRows(rows: readonly SummaryInput[]): CsvCell[][] {
     r.pastes,
     r.attemptId,
     r.seed,
+    r.latePenalty?.minutes ?? 0,
+    r.latePenalty?.points ?? 0,
   ]);
 }
 

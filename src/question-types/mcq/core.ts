@@ -88,6 +88,18 @@ export const mcq = defineQuestionType<McqDef, McqInstance, McqResponse>({
     return { selected: picked.length ? picked : [rng.pick(ids)] };
   },
 
+  wrongResponse(inst) {
+    const wrong = inst.options.map((o) => o.id).filter((id) => !inst.key.includes(id));
+    if (wrong.length === 0) return null;
+    // Single answer: the first wrong option. Several: exactly the wrong ones.
+    return { selected: inst.multiple ? wrong : [wrong[0]] };
+  },
+
+  estimateSeconds: (def) => 30 + 8 * def.options.length,
+
+  analysisTokens: (_inst, r) => [...new Set(r.selected)],
+  tokenUniverse: (inst) => ({ tokens: inst.options.map(({ id, text }) => ({ id, text })), key: inst.key, options: true }),
+
   validateDef(def) {
     const issues: PreflightIssue[] = [];
     const correct = def.options.filter((o) => o.correct).length;

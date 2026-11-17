@@ -1,5 +1,7 @@
 "use client";
 
+import { withFormatHint } from "../hints";
+import { Prose } from "@/components/ui/prose";
 import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -35,7 +37,7 @@ export const tableFillUi: QuestionTypeUi<TableFillDef, StudentInstance, TableFil
 
     return (
       <div className="grid gap-5">
-        <Field label="Question">
+        <Field label="Question" hint={withFormatHint("Say what to fill in, e.g. “Complete the Punnett square for Aa × Aa.”")}>
           <Textarea value={def.stem} onChange={(e) => set({ stem: e.target.value })} />
         </Field>
 
@@ -43,7 +45,9 @@ export const tableFillUi: QuestionTypeUi<TableFillDef, StudentInstance, TableFil
           <span className="text-sm font-medium">Table</span>
           <p className="text-xs text-muted-foreground">
             Plain text is shown to the student. Make a cell a blank with <code>{"{{num:5}}"}</code>, <code>{"{{text:Paris|paris}}"}</code> or{" "}
-            <code>{"{{select:a|b*|c}}"}</code>.
+            <code>{"{{select:a|b*|c}}"}</code>. Numbers take a tolerance (<code>{"{{num:9.8±0.1}}"}</code>, <code>{"{{num:120±5%}}"}</code>);
+            text blanks accept any of the answers between bars, ignoring case; in a dropdown the starred option is
+            correct. Each blank is worth an equal share of the points.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full border-separate border-spacing-1 text-sm">
@@ -115,7 +119,7 @@ export const tableFillUi: QuestionTypeUi<TableFillDef, StudentInstance, TableFil
     const set = (id: string, v: string) => onChange?.({ blanks: { ...blanks, [id]: v } });
     return (
       <div className="grid gap-4">
-        <p className="whitespace-pre-wrap text-base">{instance.stem}</p>
+        <Prose className="text-base">{instance.stem}</Prose>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>

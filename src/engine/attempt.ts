@@ -1,4 +1,4 @@
-import { getQuestionType } from "@/question-types/registry";
+import { generateQuestion } from "./generate";
 import { createRng, questionSeed } from "./rng";
 import { selectQuestions } from "./selection/select";
 import type { Blueprint, PoolItem, SelectionTrace } from "./selection/types";
@@ -9,6 +9,8 @@ export interface AttemptPoolItem extends PoolItem {
   versionId: string;
   type: string;
   def: unknown;
+  /** Free tags plus bloom:/lo: conventions (src/engine/tags.ts). Never affects selection. */
+  tags?: string[];
 }
 
 export interface BuiltAttemptItem {
@@ -45,9 +47,7 @@ export function buildAttempt(
 
   const items = questionIds.map((id, position) => {
     const q = byId.get(id)!;
-    const type = getQuestionType(q.type);
-    const def = type.defSchema.parse(q.def);
-    const { instance, vars } = type.generate(def, createRng(questionSeed(attemptSeed, q.versionId)));
+    const { instance, vars } = generateQuestion(q.type, q.def, createRng(questionSeed(attemptSeed, q.versionId)));
     return {
       position,
       questionId: q.id,

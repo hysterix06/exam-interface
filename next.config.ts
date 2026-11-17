@@ -5,6 +5,12 @@ import type { NextConfig } from "next";
 // depends on the signed-in user, and plain dynamic rendering keeps exam state
 // easy to reason about. Revisit in Phase 7 for public/static pages.
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      // Image uploads (5 MB, src/server/assets.ts) plus multipart overhead.
+      bodySizeLimit: "6mb",
+    },
+  },
   // Pages may only be framed by this app (widgets are embedded same-origin).
   async headers() {
     return [

@@ -69,6 +69,11 @@ export const widget = defineQuestionType<WidgetDef, WidgetInstance, WidgetRespon
 
   randomResponse: (inst, rng) => (rng.next() < 0.33 ? { state: inst.solution } : { state: { total: rng.int(0, 99), order: [] } }),
 
+  // A state that reports nothing: every check reads "not reported".
+  wrongResponse: () => ({ state: {} }),
+
+  estimateSeconds: () => 180,
+
   validateDef(def) {
     const issues: PreflightIssue[] = [];
     const block = (code: string, message: string, path?: string) => issues.push({ severity: "blocking", code, message, path });

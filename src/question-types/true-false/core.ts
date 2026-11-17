@@ -56,6 +56,13 @@ export const trueFalse = defineQuestionType<TrueFalseDef, TrueFalseInstance, Tru
     return { value: rng.next() < 0.5 };
   },
 
+  wrongResponse: (inst) => ({ value: !inst.answer }),
+
+  estimateSeconds: () => 20,
+
+  analysisTokens: (_inst, r) => [String(r.value)],
+  tokenUniverse: (inst) => ({ tokens: OPTIONS, key: [String(inst.answer)], options: true }),
+
   validateDef(def) {
     const issues: PreflightIssue[] = [];
     if (!def.stem.trim()) {

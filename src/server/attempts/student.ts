@@ -5,10 +5,9 @@ import { attempts, courses, enrollments, exams, topics } from "@/db/schema";
 import { examSettingsSchema } from "@/engine/exam";
 import { visibility } from "@/engine/attempts/release";
 import { effectiveState } from "@/engine/exam-state";
-import { blueprintSchema } from "@/engine/selection/types";
-import { isExpired } from "@/engine/attempts/deadline";
+import { blueprintSchema, blueprintTopics } from "@/engine/selection/types";
 import type { CurrentUser } from "@/server/auth";
-import { finalizeMany, windowClosed } from "./take";
+import { finalizeMany, windowClosed, attemptExpired } from "./take";
 
 async function topicNames(ids: string[]) {
   if (ids.length === 0) return {} as Record<string, string>;
@@ -36,7 +35,7 @@ async function describe(user: CurrentUser, rows: { exam: typeof exams.$inferSele
     ...new Set(
       rows.flatMap(({ exam }) => {
         const bp = blueprintSchema.safeParse(exam.blueprint);
-        return bp.success ? bp.data.sections.map((s) => s.topicId) : [];
+        return bp.success ? blueprintTopics(bp.data) : [];
       }),
     ),
   ]);
@@ -47,7 +46,7 @@ async function describe(user: CurrentUser, rows: { exam: typeof exams.$inferSele
   const stale = mine.filter((a) => {
     if (a.state !== "in_progress") return false;
     const exam = rows.find((r) => r.exam.id === a.examId)!.exam;
-    return isExpired(a.deadlineAt, now) || windowClosed(exam, now);
+    return attemptExpired(a, now) || windowClosed(exam, now);
   });
   if (stale.length > 0) {
     await finalizeMany(stale.map((a) => a.id));
@@ -70,7 +69,7 @@ async function describe(user: CurrentUser, rows: { exam: typeof exams.$inferSele
       closesAt: exam.closesAt?.toISOString() ?? null,
       settings,
       questionCount: bp.success ? bp.data.sections.reduce((s, x) => s + x.count, 0) : 0,
-      topics: bp.success ? [...new Set(bp.data.sections.map((s) => names[s.topicId]).filter(Boolean))] : [],
+      topics: bp.success ? [...new Set(blueprintTopics(bp.data).map((t) => names[t]).filter(Boolean))] : [],
       attempts: theirs.map((a) => ({
         id: a.id,
         state: a.state,

@@ -1,12 +1,15 @@
 import { fmtNum } from "../grading/format";
+import { generateQuestion, validateQuestion } from "../generate";
 import { createRng } from "../rng";
 import type { AttemptPoolItem } from "../attempt";
 import { type Names, checkBlueprint } from "../selection/check";
-import type { Blueprint } from "../selection/types";
+import { type Blueprint, blueprintTopics } from "../selection/types";
 import type { ExamSettings } from "../exam";
 import type { PreflightIssue } from "../types";
 import { getQuestionType } from "@/question-types/registry";
-import { checkKeys } from "./simulate";
+import { checkKeys, type WrongRunSummary } from "./simulate";
+import { estimateSecondsById } from "./estimate";
+import { findSimilarQuestions, similarityIssues } from "./similar-questions";
 import { summarizeBlueprint } from "./summary";
 
 export type PreflightStatus = "pass" | "warn" | "fail";
@@ -62,6 +65,14 @@ function item(
   };
 }
 
+/** "all zero", or the negative-marking range with the questions that cause it. */
+function wrongDetail(w: WrongRunSummary | null, qName: (id: string) => string) {
+  if (!w || (w.min === 0 && w.max === 0)) return "all zero";
+  const range = w.min === w.max ? fmtNum(w.min) : `${fmtNum(w.min)} to ${fmtNum(w.max)}`;
+  const which = w.penalized.slice(0, 3).map(qName).join("; ") + (w.penalized.length > 3 ? ` and ${fmtNum(w.penalized.length - 3)} more` : "");
+  return `${range} of ${fmtNum(w.outOf)}, from negative marking on ${which}`;
+}
+
 function plural(n: number, one: string, many = `${one}s`) {
   return `${fmtNum(n)} ${n === 1 ? one : many}`;
 }
@@ -79,7 +90,10 @@ export function preflightExam(input: PreflightInput, opts: PreflightOptions = {}
   const items: PreflightItem[] = [];
 
   // 1. Pools big enough for the blueprint.
-  const pools = checkBlueprint(blueprint, pool, topicNames);
+  const pools = [
+    ...checkBlueprint(blueprint, pool, topicNames),
+    ...similarityIssues(findSimilarQuestions(blueprint, pool), questionNames),
+  ];
   const blueprintBlocking = pools.filter((i) => i.severity === "blocking");
   const blueprintWarnings = pools.filter((i) => i.severity === "warning");
   items.push({
@@ -93,19 +107,19 @@ export function preflightExam(input: PreflightInput, opts: PreflightOptions = {}
   });
 
   // Only questions the blueprint can actually draw need checking.
-  const topics = new Set(blueprint.sections.map((s) => s.topicId));
+  const topics = new Set(blueprintTopics(blueprint));
   const drawable = pool.filter((q) => topics.has(q.topicId) && q.weight > 0);
 
   // 2. Answer keys and definitions.
   const keyProblems: string[] = [];
   for (const q of drawable) {
     const type = getQuestionType(q.type);
-    const parsed = type.defSchema.safeParse(q.def);
-    if (!parsed.success) {
+    const issues = validateQuestion(type, q.def);
+    if (issues.some((i) => i.code === "malformed")) {
       keyProblems.push(`${qName(q.id)}: the question is incomplete or malformed.`);
       continue;
     }
-    for (const issue of type.validateDef(parsed.data)) {
+    for (const issue of issues) {
       if (issue.severity === "blocking") keyProblems.push(`${qName(q.id)}: ${issue.message}`);
     }
   }
@@ -125,10 +139,9 @@ export function preflightExam(input: PreflightInput, opts: PreflightOptions = {}
   if (keyProblems.length === 0) {
     for (const q of drawable) {
       const type = getQuestionType(q.type);
-      const def = type.defSchema.parse(q.def);
       try {
         for (let s = 0; s < generations; s++) {
-          const { instance } = type.generate(def, createRng(`preflight:${q.id}:${s}`));
+          const { instance } = generateQuestion(type, q.def, createRng(`preflight:${q.id}:${s}`));
           type.instanceSchema.parse(JSON.parse(JSON.stringify(instance)));
         }
       } catch (e) {
@@ -151,7 +164,7 @@ export function preflightExam(input: PreflightInput, opts: PreflightOptions = {}
   if (keyProblems.length) items[items.length - 1].status = "warn";
 
   // 4. Points.
-  const summary = summarizeBlueprint(blueprint, pool, topicNames);
+  const summary = summarizeBlueprint(blueprint, pool, topicNames, estimateSecondsById(pool));
   const pointsProblems: string[] = [];
   if (summary.questionCount > 0 && summary.pointsMax === 0 && !summary.incomplete) {
     pointsProblems.push("The exam is worth 0 points.");
@@ -173,16 +186,21 @@ export function preflightExam(input: PreflightInput, opts: PreflightOptions = {}
     problems: pointsProblems,
   });
 
-  // 5. Time limit.
+  // 5. Time limit, against the rule-of-thumb estimate.
+  const limit = settings.timeLimitMinutes;
+  const estimate = summary.estimatedMinutes;
+  const tight = limit !== null && estimate !== null && estimate > limit * 0.9;
   items.push({
     id: "time",
     title: "Time limit is set",
-    status: settings.timeLimitMinutes === null ? "warn" : "pass",
+    status: limit === null || tight ? "warn" : "pass",
     detail:
-      settings.timeLimitMinutes === null
+      limit === null
         ? "No time limit: students can take as long as they like once they start."
-        : `${plural(settings.timeLimitMinutes, "minute")} per attempt.`,
-    problems: [],
+        : `${plural(limit, "minute")} per attempt${estimate !== null ? `; a typical student needs about ${plural(estimate, "minute")}` : ""}.`,
+    problems: tight
+      ? [`The estimate (about ${plural(estimate!, "minute")}) is more than 90% of the limit, so slower students may run out of time.`]
+      : [],
   });
 
   // 6. Access.
@@ -193,6 +211,26 @@ export function preflightExam(input: PreflightInput, opts: PreflightOptions = {}
     detail: `${settings.requireCode ? "A single-use code is required to enter" : "Any enrolled student can enter"}; ${plural(settings.attemptsAllowed, "attempt")} allowed.`,
     problems: [],
   });
+
+  // Adaptive: the pool a live path is chosen from.
+  if (settings.adaptive) {
+    const topicSet = new Set(blueprintTopics(blueprint));
+    const inTopics = pool.filter((q) => topicSet.has(q.topicId) && q.weight > 0);
+    const handMarked = inTopics.filter((q) => getQuestionType(q.type).manual || getQuestionType(q.type).review);
+    const usable = inTopics.length - handMarked.length;
+    const levels = new Set(inTopics.filter((q) => !handMarked.includes(q)).map((q) => q.difficulty)).size;
+    const problems: string[] = [];
+    if (usable < settings.adaptive.length) problems.push(`Only ${plural(usable, "question")} can be used, but each student is asked ${settings.adaptive.length}.`);
+    if (handMarked.length) problems.push(`${plural(handMarked.length, "hand-marked question")} (written answers, drawings, passages with them) can't steer an adaptive path and will be left out.`);
+    if (settings.adaptive.rule === "staircase" && levels < 2) problems.push("Every usable question is at the same difficulty, so there is nowhere to step up or down.");
+    items.push({
+      id: "adaptive",
+      title: "The adaptive pool can carry every student through",
+      status: usable < settings.adaptive.length ? "fail" : problems.length ? "warn" : "pass",
+      detail: `${settings.adaptive.rule === "rasch" ? "Rasch ability estimate" : "Difficulty steps"}, ${plural(settings.adaptive.length, "question")} per student, from ${plural(usable, "usable question")}.`,
+      problems,
+    });
+  }
 
   // 7. Perfect-student and blank runs (needs the earlier checks to pass).
   const canRun = blueprintBlocking.length === 0 && keyProblems.length === 0 && genProblems.length === 0;
@@ -209,15 +247,17 @@ export function preflightExam(input: PreflightInput, opts: PreflightOptions = {}
       keyProblemsRun.push(
         f.kind === "perfect"
           ? `${qName(f.questionId)}: answering with its own key scored ${fmtNum(f.score)} of ${fmtNum(f.expected)}.`
-          : `${qName(f.questionId)}: leaving it blank scored ${fmtNum(f.score)}, not 0.`,
+          : f.kind === "blank"
+            ? `${qName(f.questionId)}: leaving it blank scored ${fmtNum(f.score)}, not 0.`
+            : `${qName(f.questionId)}: a deliberately wrong answer scored ${fmtNum(f.score)}. The key accepts answers it shouldn't.`,
       );
     }
     if (result.failures.length > 5) keyProblemsRun.push(`…and ${fmtNum(result.failures.length - 5)} more.`);
-    runDetail = `${plural(result.runs, "fake student")} answered with the key (all full marks) and ${fmtNum(result.runs)} left everything blank (all zero).`;
+    runDetail = `${plural(result.runs, "fake student")} answered with the key (all full marks), ${fmtNum(result.runs)} left everything blank (all zero) and ${fmtNum(result.runs)} answered everything wrong (${wrongDetail(result.wrong, qName)}).`;
   }
   items.push({
     id: "perfect",
-    title: "A perfect student scores 100%, a blank one scores 0",
+    title: "A perfect student scores 100%, a blank or wrong one scores nothing",
     status: !canRun ? "warn" : keyProblemsRun.length ? "fail" : "pass",
     detail: keyProblemsRun.length ? "The answer key or grader disagrees with itself." : runDetail,
     problems: keyProblemsRun,

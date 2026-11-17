@@ -1,6 +1,6 @@
 import { fmtNum } from "../grading/format";
 import type { Names } from "./check";
-import type { Blueprint, SelectionTrace } from "./types";
+import { type Blueprint, type SelectionTrace, sectionTopics } from "./types";
 
 /**
  * Plain-language account of how one student's questions were chosen, e.g.
@@ -12,16 +12,19 @@ export function explainSelection(
   blueprint: Blueprint,
   names: { topics?: Names; questions?: Names } = {},
 ): string[] {
-  const topic = (i: number) => {
-    const id = blueprint.sections[i]?.topicId ?? "";
-    return names.topics?.[id] ?? id;
+  const name = (id: string) => names.topics?.[id] ?? id;
+  const topic = (i: number, own?: string) => {
+    if (own) return name(own);
+    const s = blueprint.sections[i];
+    return s ? sectionTopics(s).map(name).join(" or ") : "";
   };
   const q = (id: string) => names.questions?.[id] ?? id;
 
   const lines = trace.picks.map((p) => {
     const level = p.difficulty === null ? "" : ` (difficulty ${p.difficulty})`;
     const share = `${fmtNum(Math.round(p.weightShare * 1000) / 10)}%`;
-    return `${q(p.questionId)}: drawn from ${topic(p.sectionIndex)}${level}; ranked ${p.rank} of ${p.candidates} in the weighted draw; its weight is ${share} of the candidates.`;
+    const how = p.via === "minimum" ? "; taken to meet its minimum" : "";
+    return `${q(p.questionId)}: drawn from ${topic(p.sectionIndex, p.topicId)}${level}${how}; ranked ${p.rank} of ${p.candidates} in the weighted draw; its weight is ${share} of the candidates.`;
   });
   for (const s of trace.skips) {
     const why =

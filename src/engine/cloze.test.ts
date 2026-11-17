@@ -83,3 +83,33 @@ describe("cloze type", () => {
     expect(cloze.validateDef({ template: "Say {{text:a}}" })).toEqual([]);
   });
 });
+
+describe("chip blanks", () => {
+  const def = cloze.defSchema.parse({ template: "{{chip:Paris}} is in {{chip:France}}; Rome is in {{text:Italy}}.", extraChips: ["Spain", " "] });
+
+  it("parse only where chips are allowed", () => {
+    expect(parseCloze("{{chip:Paris}}", { allowChips: true }).blanks[0]).toMatchObject({ kind: "chip", answer: "Paris" });
+    expect(parseCloze("{{chip:Paris}}").errors[0]).toMatch(/only work in fill-in-the-blank/);
+    expect(parseCloze("{{chip:}}", { allowChips: true }).errors[0]).toMatch(/write the chip/);
+    expect(parseCloze("{{chip:a|b}}", { allowChips: true }).errors[0]).toMatch(/one answer/);
+  });
+
+  it("puts every answer and extra in one shuffled bank, and grades by chip text", () => {
+    const { instance } = cloze.generate(def, createRng("chips"));
+    expect([...instance.chips!].sort()).toEqual(["France", "Paris", "Spain"]);
+    const r = cloze.grade(instance, { blanks: { b1: "Paris", b2: "Spain", b3: "italy" } }, { points: 3 });
+    expect(r.lines.map((l) => l.verdict)).toEqual(["correct", "wrong", "correct"]);
+    expect(cloze.redact(instance)).toMatchObject({ chips: instance.chips, segments: expect.arrayContaining([{ kind: "chip", id: "b1" }]) });
+  });
+
+  it("leaves questions without chips exactly as before", () => {
+    const plain = cloze.defSchema.parse({ template: "A {{text:x}}" });
+    expect(cloze.generate(plain, createRng("p")).instance).not.toHaveProperty("chips");
+  });
+
+  it("warns about extras that do nothing or repeat an answer", () => {
+    const codes = (d: unknown) => cloze.validateDef(cloze.defSchema.parse(d)).map((i) => i.code);
+    expect(codes({ template: "A {{text:x}}", extraChips: ["y"] })).toContain("cloze.extra-chips-unused");
+    expect(codes({ template: "A {{chip:x}}", extraChips: ["x"] })).toContain("cloze.extra-chip-is-answer");
+  });
+});

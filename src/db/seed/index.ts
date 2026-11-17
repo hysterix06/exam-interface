@@ -1,6 +1,7 @@
 // Idempotent demo seed: `npm run db:seed`. Creates one account per role, two
 // courses, question banks, a draft, an open quiz, graded practice results, and
 // showcase content covering every question type.
+import { ensureTypesReady } from "@/question-types/registry";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -11,6 +12,7 @@ import { getQuestionType } from "@/question-types/registry";
 import * as schema from "../schema";
 import { CHEM_QUESTIONS, CHEM_TOPICS, DEMO_QUESTIONS, DEMO_TOPICS } from "./demo-content";
 import { seedPracticeResults } from "./practice";
+import { seedField } from "./field";
 import { seedShowcase } from "./showcase";
 
 config({ path: ".env.local" });
@@ -151,6 +153,7 @@ async function seedOpenExam(db: SeedDb, authorId: string) {
 }
 
 async function main() {
+  await ensureTypesReady();
   const password = env("SEED_PASSWORD");
   const supabase = createClient(env("NEXT_PUBLIC_SUPABASE_URL"), env("SUPABASE_SECRET_KEY"), {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -221,6 +224,7 @@ async function main() {
   await seedPracticeResults(db, supabase, password, DEMO_COURSE_ID, author);
   // After the practice results: it reuses their demo students for the marking queue.
   await seedShowcase(db, DEMO_COURSE_ID, author);
+  await seedField(db, supabase, DEMO_COURSE_ID, author);
 
   await client.end();
 }

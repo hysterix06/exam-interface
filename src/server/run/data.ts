@@ -1,4 +1,8 @@
 import "server-only";
+import { canonical } from "@/engine/regrade";
+import { type AdaptivePlan, replayAdaptive, type StepTrace } from "@/engine/adaptive-live";
+import { dwellTimes } from "@/engine/dwell";
+import { generateQuestion } from "@/engine/generate";
 import { and, asc, count, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db/client";
@@ -25,7 +29,7 @@ import { topicMastery } from "@/engine/mastery";
 import { compareReproduction } from "@/engine/regrade";
 import { createRng, questionSeed } from "@/engine/rng";
 import { explainSelection } from "@/engine/selection/explain";
-import { blueprintSchema } from "@/engine/selection/types";
+import { blueprintSchema, blueprintTopics } from "@/engine/selection/types";
 import { questionLabel } from "@/lib/question-label";
 import { getQuestionType } from "@/question-types/registry";
 import { inScope, type Scope, scopeFor } from "@/server/access";
@@ -59,6 +63,8 @@ export async function loadLive(scope: Scope, examId: string) {
         deadlineAt: attempts.deadlineAt,
         score: attempts.score,
         maxScore: attempts.maxScore,
+        cursor: attempts.cursor,
+        lastSeenAt: attempts.lastSeenAt,
       })
       .from(attempts)
       .innerJoin(profiles, eq(profiles.id, attempts.userId))
@@ -89,6 +95,15 @@ export async function loadLive(scope: Scope, examId: string) {
   ]);
   const itemsBy = new Map(items.map((i) => [i.attemptId, i]));
   const signalsBy = new Map(signals.map((e) => [e.attemptId, e]));
+  // The question each student last opened (their newest "view"), as a position.
+  const viewing = await db
+    .selectDistinctOn([events.attemptId], { attemptId: events.attemptId, position: attemptItems.position, cursor: attempts.cursor })
+    .from(events)
+    .innerJoin(attempts, eq(attempts.id, events.attemptId))
+    .innerJoin(attemptItems, sql`${attemptItems.id}::text = ${events.payload} ->> 'itemId'`)
+    .where(and(real, eq(attempts.state, "in_progress"), eq(events.type, "view")))
+    .orderBy(events.attemptId, desc(events.ts));
+  const viewingBy = new Map(viewing.map((v) => [v.attemptId, v.position]));
 
   // Enrolled students with no real attempt yet: who still has to show up.
   const started = new Set(rows.map((r) => r.userId));
@@ -115,10 +130,14 @@ export async function loadLive(scope: Scope, examId: string) {
         lastSaved: i?.lastSaved ? new Date(i.lastSaved).toISOString() : null,
         blurs: e?.blurs ?? 0,
         pastes: e?.pastes ?? 0,
+        /** 1-based question the student is on, when known (their latest view, or the sequential cursor). */
+        onQuestion: r.state !== "in_progress" ? null : onQuestion(viewingBy.get(r.id) ?? r.cursor),
       };
     }),
   };
 }
+
+const onQuestion = (position: number | null | undefined) => (position === null || position === undefined ? null : position + 1);
 
 /** Extensions that apply to this exam: its own, plus a student's all-exams accommodations. */
 export async function listExtensions(scope: Scope, examId: string) {
@@ -290,6 +309,7 @@ export async function listExamAttempts(scope: Scope, examId: string) {
       seed: attempts.seed,
       startedAt: attempts.startedAt,
       submittedAt: attempts.submittedAt,
+      latePenalty: attempts.latePenalty,
     })
     .from(attempts)
     .innerJoin(profiles, eq(profiles.id, attempts.userId))
@@ -328,6 +348,7 @@ export async function listExportSummary(scope: Scope, examId: string): Promise<S
     extensions: exts.filter((e) => e.userId === r.userId),
     blurs: sig.get(r.id)?.blurs ?? 0,
     pastes: sig.get(r.id)?.pastes ?? 0,
+    latePenalty: r.latePenalty as { minutes: number; points: number } | null,
   }));
 }
 
@@ -364,7 +385,7 @@ export async function listExportItems(scope: Scope, examId: string): Promise<Ite
 }
 
 /** One student's whole attempt: what they saw, said, and how it was scored. */
-export async function loadAttemptDetail(scope: Scope, examId: string, attemptId: string) {
+export async function loadAttemptDetail(scope: Scope, examId: string, attemptId: string, opts: { reproduce?: boolean } = {}) {
   const [row] = await db
     .select({ attempt: attempts, exam: exams, name: profiles.fullName, email: profiles.email })
     .from(attempts)
@@ -381,6 +402,8 @@ export async function loadAttemptDetail(scope: Scope, examId: string, attemptId:
       instance: attemptItems.instance,
       questionVersionId: attemptItems.questionVersionId,
       seedVersionId: attemptItems.seedVersionId,
+      selection: attemptItems.selection,
+      questionId: questionVersions.questionId,
       version: questionVersions.version,
       type: questionVersions.type,
       def: questionVersions.def,
@@ -406,16 +429,21 @@ export async function loadAttemptDetail(scope: Scope, examId: string, attemptId:
   const signals = await db
     .select({ type: events.type, n: count() })
     .from(events)
-    .where(eq(events.attemptId, attemptId))
+    .where(and(eq(events.attemptId, attemptId), sql`${events.type} <> 'view'`))
     .groupBy(events.type);
+  const log = await db.select({ type: events.type, ts: events.ts, payload: events.payload }).from(events).where(eq(events.attemptId, attemptId));
+  const dwell = log.some((e) => e.type === "view")
+    ? dwellTimes(log, row.attempt.startedAt, row.attempt.submittedAt ?? new Date(), items[0]?.id ?? null).seconds
+    : {};
 
-  const reproduction = await reproduce(row.exam, row.attempt, items);
+  // Rebuilding from the seed is the expensive part; bulk printing skips it.
+  const reproduction = opts.reproduce === false ? null : await reproduce(row.exam, row.attempt, items);
 
   return {
     attempt: row.attempt,
     exam: row.exam,
     student: row.name ?? row.email,
-    items: items.map((i) => ({ ...i, key: getQuestionType(i.type).keyResponse(i.instance), label: questionLabel(i.def, 90), vars: varsFor(row.attempt.seed, i) })),
+    items: items.map((i) => ({ ...i, key: getQuestionType(i.type).keyResponse(i.instance), label: questionLabel(i.def, 90), vars: varsFor(row.attempt.seed, i), seconds: dwell[i.id] ?? null })),
     signals: Object.fromEntries(signals.map((s) => [s.type, s.n])),
     reproduction,
     mastery: topicMastery(items.map((i) => ({ topicId: i.topicId, topicName: i.topicName, score: i.score ?? 0, max: i.max ?? 0, needsReview: i.needsReview ?? false }))),
@@ -428,8 +456,7 @@ export async function loadAttemptDetail(scope: Scope, examId: string, attemptId:
  */
 function varsFor(attemptSeed: string, i: { type: string; def: unknown; seedVersionId: string }): Record<string, string | number | boolean> {
   try {
-    const type = getQuestionType(i.type);
-    return type.generate(type.defSchema.parse(i.def), createRng(questionSeed(attemptSeed, i.seedVersionId))).vars;
+    return generateQuestion(i.type, i.def, createRng(questionSeed(attemptSeed, i.seedVersionId))).vars;
   } catch {
     return {};
   }
@@ -439,8 +466,9 @@ function varsFor(attemptSeed: string, i: { type: string; def: unknown; seedVersi
 async function reproduce(
   exam: typeof exams.$inferSelect,
   attempt: typeof attempts.$inferSelect,
-  stored: { position: number; questionVersionId: string; seedVersionId: string; version: number; type: string; instance: unknown; def: unknown }[],
+  stored: { position: number; questionVersionId: string; seedVersionId: string; version: number; type: string; instance: unknown; def: unknown; questionId: string; selection: unknown }[],
 ) {
+  if (attempt.plan) return reproduceAdaptive(attempt, stored);
   const blueprint = blueprintSchema.safeParse(exam.blueprint);
   if (!blueprint.success) return null;
   // A preview of a draft was built from live questions; there is nothing locked to rebuild from.
@@ -451,7 +479,7 @@ async function reproduce(
       : [];
   if (pool.length === 0) return null;
 
-  const topicIds = [...new Set(blueprint.data.sections.map((s) => s.topicId))];
+  const topicIds = blueprintTopics(blueprint.data);
   try {
     const built = buildAttempt(attempt.seed, blueprint.data, pool);
     const names = Object.fromEntries(stored.map((s) => [s.seedVersionId, questionLabel(s.def, 60)]));
@@ -464,6 +492,36 @@ async function reproduce(
   } catch {
     return { identical: false, differences: ["The exam could not be rebuilt from this seed."], notes: [] as string[], explanation: [] as string[] };
   }
+}
+
+/**
+ * Adaptive Reproduce: replay the path from the seed, the frozen plan and the
+ * results each step recorded, and regenerate each question's content.
+ */
+async function reproduceAdaptive(
+  attempt: typeof attempts.$inferSelect,
+  stored: { position: number; seedVersionId: string; type: string; instance: unknown; questionId: string; selection: unknown }[],
+) {
+  const plan = attempt.plan as AdaptivePlan;
+  const steps = stored.map((s) => ({ questionId: s.questionId, previous: (s.selection as StepTrace | null)?.previous ?? null, reason: (s.selection as StepTrace | null)?.reason ?? null }));
+  const path = replayAdaptive(attempt.seed, plan, steps);
+  const versions = await db.select({ id: questionVersions.id, def: questionVersions.def }).from(questionVersions).where(inArray(questionVersions.id, [...new Set(stored.map((s) => s.seedVersionId))]));
+  const defOf = new Map(versions.map((v) => [v.id, v.def]));
+  const content: string[] = [];
+  for (const s of stored) {
+    try {
+      const again = generateQuestion(s.type, defOf.get(s.seedVersionId), createRng(questionSeed(attempt.seed, s.seedVersionId))).instance;
+      if (canonical(again) !== canonical(s.instance)) content.push(`Position ${s.position + 1}: same question, but the generated content differs.`);
+    } catch {
+      content.push(`Position ${s.position + 1}: the question could not be regenerated.`);
+    }
+  }
+  return {
+    identical: path.identical && content.length === 0,
+    differences: [...path.differences, ...content],
+    notes: [`Adaptive (${plan.rule === "rasch" ? "Rasch ability estimate" : "difficulty steps"}), ${plan.length} questions. ${plan.calibration} Each step was replayed from the result recorded at the time, so later regrades don't change the path.`],
+    explanation: steps.map((s, i) => `Question ${i + 1}: ${s.reason ?? "no reason recorded"}`),
+  };
 }
 
 /**
