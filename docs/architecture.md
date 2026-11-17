@@ -6,8 +6,8 @@ One codebase, three homes. A person's role (stored in `profiles.role`) decides w
 
 | Who | Where | What they get |
 | --- | --- | --- |
-| **Students** | `/` | What to sit now, what's coming up, and results. Exam info pages list the rules before it opens. `/attempt/[id]` is the exam screen, with no navigation chrome. |
-| **Instructors** | `/teach` | An attention queue: what's live, what needs marking, what's ready to release, drafts that fail checks. One exam is one workspace with four tabs: **Build** (autosaves) · **Verify** · **Run** · **Results**. Also: courses, question bank, marking. |
+| **Students** | `/` | A sidebar like staff: **Home** (ready for you, this week, courses with their grade, recently graded), **Calendar**, **Grades**, **Your data**, and one entry per course. Each course has Overview · Syllabus · Calendar · Work · Grades. `/assignments/[id]` is where work is handed in. `/attempt/[id]` is the exam screen, with no navigation chrome. |
+| **Instructors** | `/teach` | An attention queue: what's live, what needs marking (exam answers and assignment hand-ins), what's ready to release, drafts that fail checks. One exam is one workspace with four tabs: **Build** (autosaves) · **Verify** · **Run** · **Results**. One course is a workspace too: Overview · Homepage · Assignments · Calendar · Grading · Gradebook · People. One assignment: **Edit** · **Hand-ins**. Also: question bank, marking. |
 | **Admins** | `/admin` | People (add, CSV import, role, switch off), courses (teachers, enrolment, archive), activity (the audit log) and organisation defaults for new exams. Admins can use every `/teach` page for any course. |
 
 Staff only see the courses they teach. Anything outside their scope is a 404, not a 403.
@@ -21,8 +21,8 @@ Staff only see the courses they teach. Anything outside their scope is a 404, no
 | UI | Tailwind CSS v4, shadcn/ui on Radix | Black and white plus one accent, `--brand`. Shared pieces in `src/components/ui`. Dark mode included. |
 | Data | Supabase Postgres + Drizzle ORM | Drizzle (as owner) does every read and write. RLS is on for every table as defense in depth. |
 | Auth | Supabase Auth | Role lives in `profiles.role` and is mirrored into the JWT. Deactivated profiles count as signed out. |
-| Realtime | Supabase Realtime (`postgres_changes` on `exams` and `attempts`) | Used only as a "something changed" signal; the page then refetches from the server. Falls back to polling. |
-| Storage | Supabase Storage, private buckets | `assets` (images, starter workbooks) and `submissions` (uploaded workbooks). Downloads go through `/assets/[id]`, which checks access and redirects to a 5-minute signed URL. |
+| Realtime | Supabase Realtime (`postgres_changes` on `exams`, `attempts`, `assignments`, `submissions`) | Used only as a "something changed" signal; the page then refetches from the server. Falls back to polling. |
+| Storage | Supabase Storage, private buckets | `assets` (images, starter workbooks) and `submissions` (uploaded workbooks and assignment hand-ins, up to 10 MB). Hand-ins download through `/submissions/[id]/files/[n]`. Downloads go through `/assets/[id]`, which checks access and redirects to a 5-minute signed URL. |
 | Validation | Zod | One set of schemas per question type, shared by editor, renderer and grader |
 | Maths and formulas | mathjs (locked down) | Variables, constraints and answer formulas |
 | Spreadsheets | HyperFormula | In-browser sheet and the uploaded-workbook checks. ExcelJS reads `.xlsx` uploads on the server. |
@@ -37,8 +37,8 @@ Code layout:
 
 - `src/engine/`: pure logic: selection, generation, grading helpers, pre-flight, simulation, analysis, the adaptive engine, IRT, the sandbox, and explanations
 - `src/question-types/<id>/`: one folder per type. Core registry in `registry.ts`; UI registry in `ui-registry.ts` (client only)
-- `src/server/`: server-only data access: `authoring`, `attempts`, `run`, `teach`, `admin`, `review.ts`, `assets.ts`
-- `src/app/`: routes: `(student)`, `attempt`, `teach`, `admin`, `assets`, `login`
+- `src/server/`: server-only data access: `authoring`, `attempts`, `run`, `teach`, `admin`, `student` (everything a student sees, per request), `assignments`, `data-export`, `api` (tokens and the v1 route table), `review.ts`, `assets.ts`
+- `src/app/`: routes: `(student)`, `attempt`, `teach`, `admin`, `assets`, `submissions`, `export`, `api/v1`, `feeds`, `login`
 - `src/db/`: Drizzle schema and the seed (`src/db/seed/`)
 - `supabase/migrations/`: Drizzle-generated SQL plus hand-written RLS, triggers and storage buckets
 - `public/widgets/`: embeddable widgets (public files: never put anything secret here)
@@ -67,4 +67,13 @@ Defined in `src/db/schema.ts`. Every top-level table carries `org_id`; it's sing
 | `extensions` | Per-student extra time, for one exam or all of them |
 | `audit_log` | Every staff action with before and after values |
 | `assets` | Uploaded images and workbooks: storage path, type, size, dimensions, hash |
+| `grade_categories` | A course's grade weights; exams and assignments point at one (`category_id`) |
+| `course_events` | Classes, holidays and reminders teachers add to a course calendar |
+| `assignments` | Instructions, dates, points, settings and rubric (JSONB), state, `released_at` |
+| `submissions` | Every hand-in, every version: text, files (storage paths), time, minutes late |
+| `submission_grades` | The mark on one hand-in: lines, ticks, feedback, late penalty, excused, override reason |
+| `assignment_extensions` | One student's later due date on one assignment |
+| `api_tokens` | Personal API tokens and calendar feeds: sha256 only, prefix, last used, expiry, revoked |
+
+Courses also carry their homepage: `description`, `syllabus` (Markdown), `term`, `starts_on`/`ends_on` and `info` (meetings, office hours, contact note, links).
 

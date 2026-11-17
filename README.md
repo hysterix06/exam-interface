@@ -8,6 +8,8 @@ There is **no AI** anywhere in it. Selection, randomisation, grading, adaptive p
 - **Per-student exams** drawn from a blueprint and generated from a seed, so any student's exam can be rebuilt exactly
 - **Verification before publishing**: a pre-flight checklist; perfect, blank and all-wrong student runs; a 200-student simulation; a variant explorer
 - **Transparency after the exam**: line-by-line grade explanations, Reproduce from seed, a regrade preview, item analysis, an audit log and exports
+- **The rest of the course**: course homepages (syllabus, weights, contact), a calendar across courses, assignments handed in as text or files and marked against a rubric, and a weighted course grade that shows its working
+- **Your data is yours**: every role can download everything they can see as a ZIP, read it through a token-based API, or subscribe to a calendar feed
 
 ## Quick start
 
@@ -29,6 +31,8 @@ npm run dev                     # http://localhost:3000
 | [Question types](docs/question-types.md) | All 19 types, wording variants, adding a type |
 | [The engine](docs/engine.md) | Randomness, selection, generation, grading, adaptive, sandbox |
 | [Exam lifecycle](docs/exam-lifecycle.md) | Checking, running and reviewing an exam |
+| [Courses and grades](docs/academics.md) | Course homepages, calendar, assignments, the course grade |
+| [Data access](docs/data-access.md) | ZIP export, the read-only API and tokens, the calendar feed |
 | [Embedded widgets](docs/widgets.md) | The `postMessage` protocol and demo widgets |
 | [Development](docs/development.md) | Setup, env vars, demo data, scripts, schema changes, testing and CI |
 

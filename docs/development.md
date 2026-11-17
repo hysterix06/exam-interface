@@ -8,7 +8,7 @@
 npm install
 cp .env.example .env.local      # fill in the Supabase URL, keys, DATABASE_URL and SEED_PASSWORD
 npm run db:push                 # apply supabase/migrations (tables, RLS, triggers, storage buckets)
-npm run db:seed                 # demo org, accounts, courses, banks and exams
+npm run db:seed                 # demo org, accounts, courses (homepages, calendars, assignments), banks and exams
 npm run dev                     # http://localhost:3000
 ```
 
