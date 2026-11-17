@@ -5,6 +5,7 @@ import { AddMembers, CourseDetailsForm, RemoveMember } from "@/components/admin/
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { PhoneLink } from "@/components/ui/phone-link";
 import { Section } from "@/components/ui/section";
 import { plural } from "@/lib/format";
 import { requireAdmin } from "@/server/access";
@@ -12,7 +13,9 @@ import { getCourseWithMembers } from "@/server/admin/courses";
 
 export const metadata: Metadata = { title: "Course" };
 
-function MemberList({ courseId, members }: { courseId: string; members: { userId: string; name: string | null; email: string; deactivatedAt: Date | null }[] }) {
+type Member = { userId: string; name: string | null; email: string; phone: string | null; phoneRegion: string | null; deactivatedAt: Date | null };
+
+function MemberList({ courseId, members, viewerRegion }: { courseId: string; members: Member[]; viewerRegion: string | null }) {
   if (members.length === 0) return null;
   return (
     <ul className="mb-4 divide-y rounded-lg border text-sm">
@@ -22,6 +25,7 @@ function MemberList({ courseId, members }: { courseId: string; members: { userId
             {m.name ?? m.email}
             {m.name && <span className="ml-2 text-muted-foreground">{m.email}</span>}
           </Link>
+          <PhoneLink phone={m.phone} region={m.phoneRegion} viewerRegion={viewerRegion} className="hidden shrink-0 sm:inline" />
           {m.deactivatedAt && <Badge>Off</Badge>}
           <RemoveMember courseId={courseId} userId={m.userId} name={m.name ?? m.email} />
         </li>
@@ -54,12 +58,12 @@ export default async function AdminCoursePage({ params }: PageProps<"/admin/cour
       />
 
       <Section title="Teachers" description={teachers.length ? undefined : "Nobody teaches this course yet, so no one can build exams for it."}>
-        <MemberList courseId={course.id} members={teachers} />
+        <MemberList courseId={course.id} members={teachers} viewerRegion={user.phoneRegion} />
         <AddMembers courseId={course.id} role="teacher" />
       </Section>
 
       <Section title="Students" description={students.length ? `${plural(students.length, "student")} enrolled.` : "No one is enrolled yet."}>
-        <MemberList courseId={course.id} members={students} />
+        <MemberList courseId={course.id} members={students} viewerRegion={user.phoneRegion} />
         <AddMembers courseId={course.id} role="student" />
         <p className="mt-2 text-xs text-muted-foreground">
           Only people who already have an account can be enrolled here. To create accounts and enrol in one step, use{" "}

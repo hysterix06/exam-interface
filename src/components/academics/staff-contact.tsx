@@ -1,7 +1,17 @@
+import { PhoneLink } from "@/components/ui/phone-link";
 import { describeMeeting, type CourseInfo } from "@/engine/course";
 
 /** Who teaches the course and how to reach them. */
-export function StaffContact({ teachers, info }: { teachers: { id: string; name: string; email: string }[]; info: CourseInfo }) {
+export function StaffContact({
+  teachers,
+  info,
+  viewerRegion,
+}: {
+  teachers: { id: string; name: string; email: string; phone: string | null; phoneRegion: string | null }[];
+  info: CourseInfo;
+  /** The viewer's own phone region: numbers in it show nationally, others internationally. */
+  viewerRegion: string | null;
+}) {
   return (
     <dl className="grid gap-x-10 gap-y-6 text-sm sm:grid-cols-2">
       <div>
@@ -16,6 +26,12 @@ export function StaffContact({ teachers, info }: { teachers: { id: string; name:
               <a href={`mailto:${t.email}`} className="text-brand underline-offset-4 hover:underline">
                 {t.email}
               </a>
+              {t.phone && (
+                <>
+                  <br />
+                  <PhoneLink phone={t.phone} region={t.phoneRegion} viewerRegion={viewerRegion} />
+                </>
+              )}
             </dd>
           ))
         )}

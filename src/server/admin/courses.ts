@@ -53,6 +53,8 @@ export async function getCourseWithMembers(orgId: string, id: string) {
       userId: profiles.id,
       name: profiles.fullName,
       email: profiles.email,
+      phone: profiles.phone,
+      phoneRegion: profiles.phoneRegion,
       role: enrollments.role,
       accountRole: profiles.role,
       deactivatedAt: profiles.deactivatedAt,

@@ -3,6 +3,13 @@ import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import jsxA11y from "eslint-plugin-jsx-a11y";
 
+// Phone numbers are parsed and formatted in one place (src/lib/phone.ts), so every
+// render site shows the same notation. Anything else imports from "@/lib/phone".
+const phoneOnlyInLib = {
+  group: ["libphonenumber-js", "libphonenumber-js/*"],
+  message: 'Import phone helpers from "@/lib/phone"; only that file may use libphonenumber-js.',
+};
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -30,6 +37,11 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    files: ["src/**/*.{ts,tsx}", "e2e/**/*.ts"],
+    ignores: ["src/lib/phone.ts"],
+    rules: { "no-restricted-imports": ["error", { patterns: [phoneOnlyInLib] }] },
+  },
   // The engine and question-type cores must stay pure so they run in the
   // browser preview, on the server and in tests alike.
   {
@@ -39,6 +51,7 @@ const eslintConfig = defineConfig([
         "error",
         {
           patterns: [
+            phoneOnlyInLib,
             { group: ["react", "react-dom", "react/*"], message: "Engine code must not import React." },
             { group: ["next", "next/*"], message: "Engine code must not import Next.js." },
             { group: ["@/db", "@/db/*", "@/server/*", "@/lib/supabase/*"], message: "Engine code must not touch the database." },

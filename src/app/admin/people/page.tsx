@@ -9,6 +9,7 @@ import { FilterForm } from "@/components/ui/filter-form";
 import { Input } from "@/components/ui/input";
 import { LocalTime } from "@/components/ui/local-time";
 import { PageHeader } from "@/components/ui/page-header";
+import { PhoneLink } from "@/components/ui/phone-link";
 import { Select } from "@/components/ui/select";
 import { Table, TD, TH, THead, TR } from "@/components/ui/table";
 import { isRole, ROLE_LABELS, ROLES } from "@/lib/auth/roles";
@@ -91,6 +92,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
                     {p.fullName ?? p.email}
                   </Link>
                   {p.fullName && <span className="block text-xs text-muted-foreground">{p.email}</span>}
+                  <PhoneLink phone={p.phone} region={p.phoneRegion} viewerRegion={user.phoneRegion} className="block text-xs" />
                 </TD>
                 <TD className="whitespace-nowrap">
                   {ROLE_LABELS[p.role]}

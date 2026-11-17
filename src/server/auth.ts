@@ -11,6 +11,9 @@ export type CurrentUser = {
   id: string;
   email: string;
   fullName: string | null;
+  /** E.164 and its region, or null. `phoneRegion` is also the viewer's region for formatting others' numbers. */
+  phone: string | null;
+  phoneRegion: string | null;
   role: Role;
   orgId: string;
 };
@@ -37,6 +40,8 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     id: profile.id,
     email: profile.email,
     fullName: profile.fullName,
+    phone: profile.phone,
+    phoneRegion: profile.phoneRegion,
     role: profile.role,
     orgId: profile.orgId,
   };

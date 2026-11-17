@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { changePasswordAction, updateNameAction } from "@/app/(student)/account/actions";
+import { changePasswordAction, updateNameAction, updatePhoneAction } from "@/app/(student)/account/actions";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { StatusText } from "@/components/ui/notice";
+import { PhoneInput, usePhoneField } from "@/components/ui/phone-input";
+import { formatPhone } from "@/lib/phone";
 
 export function NameForm({ name }: { name: string }) {
   const [pending, start] = useTransition();
@@ -29,6 +31,40 @@ export function NameForm({ name }: { name: string }) {
         Save
       </Button>
       {msg && <StatusText ok={msg.ok}>{msg.text}</StatusText>}
+    </form>
+  );
+}
+
+/** Your own contact number, shown to the people you teach or are taught by. Leave blank to remove it. */
+export function PhoneForm({ phone, region }: { phone: string | null; region: string | null }) {
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [value, setValue] = usePhoneField(
+    phone && region ? { raw: formatPhone(phone, region, region), region } : undefined,
+  );
+  return (
+    <form
+      className="grid max-w-md gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        start(async () => {
+          const r = await updatePhoneAction(value);
+          setMsg(r.ok ? { ok: true, text: "Saved." } : { ok: false, text: r.error });
+        });
+      }}
+    >
+      <PhoneInput
+        id="account-phone"
+        value={value}
+        onChange={setValue}
+        hint="Your instructors or students in your courses can see this. Leave it blank to remove it."
+      />
+      <div className="flex items-center gap-3">
+        <Button type="submit" variant="outline" disabled={pending}>
+          Save
+        </Button>
+        {msg && <StatusText ok={msg.ok}>{msg.text}</StatusText>}
+      </div>
     </form>
   );
 }

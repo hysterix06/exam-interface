@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { StatusText } from "@/components/ui/notice";
+import { useGuessedRegion } from "@/components/ui/phone-input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toCsv } from "@/engine/csv";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/auth/roles";
+import { formatPhone, phoneCountries } from "@/lib/phone";
 import type { RosterParse } from "@/lib/roster";
 import type { ImportOutcome } from "@/server/admin/people";
 
@@ -31,6 +33,10 @@ export function ImportPeople({ courses }: { courses: { id: string; title: string
   const [text, setText] = useState("");
   const [role, setRole] = useState<Role>("student");
   const [courseId, setCourseId] = useState("");
+  const guessedRegion = useGuessedRegion();
+  const [pickedRegion, setPickedRegion] = useState<string | null>(null);
+  // The country that numbers without a leading + are read in.
+  const phoneRegion = pickedRegion ?? guessedRegion;
   const [step, setStep] = useState<Step>({ kind: "edit" });
   const [error, setError] = useState<string | null>(null);
 
@@ -64,14 +70,14 @@ export function ImportPeople({ courses }: { courses: { id: string; title: string
       <DialogContent
         className="max-w-2xl"
         title="Import a list of people"
-        description={step.kind === "edit" ? "One person per line: an email, or a name and email. Paste straight from a spreadsheet." : undefined}
+        description={step.kind === "edit" ? "One person per line: an email, or a name and email, and optionally a phone number. Paste straight from a spreadsheet." : undefined}
       >
         {step.kind === "edit" && (
           <form
             className="grid gap-4"
             onSubmit={(e) => {
               e.preventDefault();
-              start(async () => setStep({ kind: "preview", parse: await previewImportAction(text) }));
+              start(async () => setStep({ kind: "preview", parse: await previewImportAction(text, phoneRegion) }));
             }}
           >
             <Textarea
@@ -79,7 +85,7 @@ export function ImportPeople({ courses }: { courses: { id: string; title: string
               onChange={(e) => setText(e.target.value)}
               rows={8}
               className="font-mono text-sm"
-              placeholder={"Ada Lovelace, ada@school.edu\nalan@school.edu\nGrace Hopper, grace@school.edu, teacher"}
+              placeholder={"Ada Lovelace, ada@school.edu, +44 20 7946 0958\nalan@school.edu\nGrace Hopper, grace@school.edu, teacher"}
               aria-label="People to import"
             />
             <div className="grid gap-4 sm:grid-cols-2">
@@ -103,6 +109,16 @@ export function ImportPeople({ courses }: { courses: { id: string; title: string
                 </Select>
               </Field>
             </div>
+            <Field label="Country for phone numbers without a + prefix">
+              <Select value={phoneRegion} onChange={(e) => setPickedRegion(e.target.value)}>
+                {phoneRegion === "" && <option value="">Choose a country…</option>}
+                {phoneCountries().map((c) => (
+                  <option key={c.region} value={c.region}>
+                    {c.name} (+{c.callingCode})
+                  </option>
+                ))}
+              </Select>
+            </Field>
             <DialogFooter>
               <Button type="submit" disabled={pending || !text.trim()}>
                 Check list
@@ -124,7 +140,10 @@ export function ImportPeople({ courses }: { courses: { id: string; title: string
                   {step.parse.rows.map((r) => (
                     <tr key={r.email} className="border-b last:border-b-0">
                       <td className="px-3 py-1.5">{r.fullName ?? <span className="text-muted-foreground">No name</span>}</td>
-                      <td className="px-3 py-1.5 text-muted-foreground">{r.email}</td>
+                      <td className="px-3 py-1.5 text-muted-foreground">
+                        {r.email}
+                        {r.phone && <span className="block">{formatPhone(r.phone.phone, r.phone.region, null)}</span>}
+                      </td>
                       <td className="px-3 py-1.5 text-right text-muted-foreground">{ROLE_LABELS[r.role ?? role]}</td>
                     </tr>
                   ))}
@@ -148,7 +167,7 @@ export function ImportPeople({ courses }: { courses: { id: string; title: string
                 disabled={pending || step.parse.rows.length === 0}
                 onClick={() =>
                   start(async () => {
-                    const r = await importPeopleAction({ text, defaultRole: role, courseId: courseId || null });
+                    const r = await importPeopleAction({ text, defaultRole: role, courseId: courseId || null, phoneRegion });
                     if (!r.ok) return setError(r.error);
                     setStep({ kind: "done", outcomes: r.outcomes });
                     router.refresh();

@@ -32,6 +32,7 @@
     "exceljs": "^4.4.0",
     "hyperformula": "^3.5.0",
     "katex": "^0.19.1",
+    "libphonenumber-js": "1.13.15",
     "lucide-react": "^1.64.0",
     "mathjs": "^15.2.0",
     "next": "16.4.6",

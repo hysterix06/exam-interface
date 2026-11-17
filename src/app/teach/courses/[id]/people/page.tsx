@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PhoneLink } from "@/components/ui/phone-link";
 import { Section } from "@/components/ui/section";
 import { plural } from "@/lib/format";
 import { getCourseWithMembers } from "@/server/admin/courses";
@@ -9,13 +10,16 @@ import { workspaceCourse } from "@/server/teach/course";
 
 export const metadata: Metadata = { title: "People" };
 
-function People({ people }: { people: { userId: string; name: string | null; email: string }[] }) {
+type Person = { userId: string; name: string | null; email: string; phone: string | null; phoneRegion: string | null };
+
+function People({ people, viewerRegion }: { people: Person[]; viewerRegion: string | null }) {
   return (
     <ul className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
       {people.map((s) => (
         <li key={s.userId} className="flex min-w-0 items-baseline gap-2">
           <span className="truncate">{s.name ?? s.email}</span>
           {s.name && <span className="truncate text-xs text-muted-foreground">{s.email}</span>}
+          <PhoneLink phone={s.phone} region={s.phoneRegion} viewerRegion={viewerRegion} className="shrink-0 text-xs" />
         </li>
       ))}
     </ul>
@@ -30,7 +34,7 @@ export default async function CoursePeoplePage({ params }: PageProps<"/teach/cou
   const teachers = roster?.members.filter((m) => m.role === "teacher") ?? [];
   return (
     <>
-      <Section title="Teachers">{teachers.length === 0 ? <EmptyState>No teacher assigned yet.</EmptyState> : <People people={teachers} />}</Section>
+      <Section title="Teachers">{teachers.length === 0 ? <EmptyState>No teacher assigned yet.</EmptyState> : <People people={teachers} viewerRegion={user.phoneRegion} />}</Section>
       <Section
         title="Students"
         description={user.role === "admin" ? undefined : "Enrolment is managed by your administrator."}
@@ -47,7 +51,7 @@ export default async function CoursePeoplePage({ params }: PageProps<"/teach/cou
         ) : (
           <>
             <p className="mb-3 text-sm text-muted-foreground">{plural(students.length, "student")} enrolled.</p>
-            <People people={students} />
+            <People people={students} viewerRegion={user.phoneRegion} />
           </>
         )}
       </Section>

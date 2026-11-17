@@ -8,6 +8,7 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from 
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { StatusText } from "@/components/ui/notice";
+import { PhoneInput, usePhoneField } from "@/components/ui/phone-input";
 import { Select } from "@/components/ui/select";
 import { ROLE_LABELS, ROLES, type Role } from "@/lib/auth/roles";
 import { OneTimeSecret } from "./one-time-secret";
@@ -19,11 +20,13 @@ export function AddPerson({ courses, defaultOpen = false }: { courses: { id: str
   const [error, setError] = useState<string | null>(null);
   const [made, setMade] = useState<{ name: string; password: string } | null>(null);
   const [role, setRole] = useState<Role>("student");
+  const [phone, setPhone, clearPhone] = usePhoneField();
 
   const reset = () => {
     setError(null);
     setMade(null);
     setRole("student");
+    clearPhone();
   };
 
   return (
@@ -63,6 +66,7 @@ export function AddPerson({ courses, defaultOpen = false }: { courses: { id: str
                   email: String(f.get("email") ?? ""),
                   role,
                   courseId: String(f.get("courseId") ?? "") || null,
+                  phone,
                 });
                 if (!r.ok) return setError(r.error);
                 setError(null);
@@ -77,6 +81,7 @@ export function AddPerson({ courses, defaultOpen = false }: { courses: { id: str
             <Field label="Email">
               <Input name="email" type="email" required autoComplete="off" />
             </Field>
+            <PhoneInput id="add-person-phone" label="Phone (optional)" value={phone} onChange={setPhone} />
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Role">
                 <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>

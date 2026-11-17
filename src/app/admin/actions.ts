@@ -12,6 +12,9 @@ import * as people from "@/server/admin/people";
 const id = z.guid();
 const invalid = { ok: false as const, error: "That item no longer exists." };
 
+/** The country numbers without + are read in; anything that isn't a 2-letter code means "none". */
+const region = (r: unknown) => (typeof r === "string" && /^[A-Z]{2}$/.test(r) ? r : "");
+
 const done = <T extends { ok: boolean }>(r: T) => {
   if (r.ok) revalidatePath("/", "layout");
   return r;
@@ -25,15 +28,15 @@ export async function addPersonAction(input: unknown) {
 }
 
 /** Parse only: the admin sees exactly who will be added before committing. */
-export async function previewImportAction(text: string) {
+export async function previewImportAction(text: string, phoneRegion = "") {
   await requireAdmin();
-  return parseRoster(String(text).slice(0, 200_000));
+  return parseRoster(String(text).slice(0, 200_000), region(phoneRegion));
 }
 
-export async function importPeopleAction(input: { text: string; defaultRole: Role; courseId: string | null }) {
+export async function importPeopleAction(input: { text: string; defaultRole: Role; courseId: string | null; phoneRegion?: string }) {
   const { user } = await requireAdmin();
   if (input.courseId && !id.safeParse(input.courseId).success) return invalid;
-  const { rows } = parseRoster(String(input.text).slice(0, 200_000));
+  const { rows } = parseRoster(String(input.text).slice(0, 200_000), region(input.phoneRegion));
   return done(await people.importPeople(user, { rows, defaultRole: input.defaultRole, courseId: input.courseId }));
 }
 

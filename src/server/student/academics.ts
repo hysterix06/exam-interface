@@ -87,7 +87,7 @@ export interface StudentCourse {
   startsOn: string | null;
   endsOn: string | null;
   info: CourseInfo;
-  teachers: { id: string; name: string; email: string }[];
+  teachers: { id: string; name: string; email: string; phone: string | null; phoneRegion: string | null }[];
   categories: { id: string; name: string; weight: number; dropLowest: number }[];
   grade: CourseGrade;
   /** Per item: what counted, for the Grades tab. */
@@ -242,7 +242,7 @@ const load = cache(async (userId: string, orgId: string) => {
     loadAssignments(user, courseRows, now),
     ids.length
       ? db
-          .select({ courseId: enrollments.courseId, id: profiles.id, name: profiles.fullName, email: profiles.email })
+          .select({ courseId: enrollments.courseId, id: profiles.id, name: profiles.fullName, email: profiles.email, phone: profiles.phone, phoneRegion: profiles.phoneRegion })
           .from(enrollments)
           .innerJoin(profiles, eq(profiles.id, enrollments.userId))
           .where(and(inArray(enrollments.courseId, ids), eq(enrollments.role, "teacher"), isNull(profiles.deactivatedAt)))
@@ -260,7 +260,7 @@ const load = cache(async (userId: string, orgId: string) => {
       ...c,
       label: courseLabel(c),
       info: parseCourseInfo(c.info),
-      teachers: teachers.filter((t) => t.courseId === c.id).map((t) => ({ id: t.id, name: t.name ?? t.email, email: t.email })),
+      teachers: teachers.filter((t) => t.courseId === c.id).map((t) => ({ id: t.id, name: t.name ?? t.email, email: t.email, phone: t.phone, phoneRegion: t.phoneRegion })),
       categories: cats,
       grade: courseGrade(cats, items),
       gradeItems: items,

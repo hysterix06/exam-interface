@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Course" };
 
 export default async function CourseOverview({ params }: PageProps<"/courses/[id]">) {
   const { id } = await params;
-  const { course, exams, assignments } = await courseForPage(id);
+  const { user, course, exams, assignments } = await courseForPage(id);
   const work = workItems(exams, assignments, new Map([[course.id, course.label]]));
   const next = work.filter((w) => w.group !== "done").slice(0, 4);
   const toDo = work.filter((w) => w.group === "now").length;
@@ -45,7 +45,7 @@ export default async function CourseOverview({ params }: PageProps<"/courses/[id
       </Section>
 
       <Section title="Contact">
-        <StaffContact teachers={course.teachers} info={course.info} />
+        <StaffContact teachers={course.teachers} info={course.info} viewerRegion={user.phoneRegion} />
       </Section>
     </>
   );

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "@/db/client";
 import { profiles } from "@/db/schema";
+import { phoneInputSchema, resolvePhoneInput } from "@/lib/phone";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/server/auth";
 
@@ -15,6 +16,21 @@ export async function updateNameAction(fullName: string): Promise<Result> {
   const name = z.string().trim().min(1).max(120).safeParse(fullName);
   if (!name.success) return { ok: false, error: "Enter your name." };
   await db.update(profiles).set({ fullName: name.data }).where(eq(profiles.id, user.id));
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/** Save (or, when blank, remove) the signed-in person's own phone number. */
+export async function updatePhoneAction(input: unknown): Promise<Result> {
+  const user = await requireRole();
+  const parsed = phoneInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Enter a phone number." };
+  const phone = resolvePhoneInput(parsed.data);
+  if (!phone.ok) return phone;
+  await db
+    .update(profiles)
+    .set({ phone: phone.value?.phone ?? null, phoneRegion: phone.value?.region ?? null })
+    .where(eq(profiles.id, user.id));
   revalidatePath("/", "layout");
   return { ok: true };
 }

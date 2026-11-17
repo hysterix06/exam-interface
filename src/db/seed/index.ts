@@ -4,13 +4,15 @@
 import { ensureTypesReady } from "@/question-types/registry";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { Role } from "@/lib/auth/roles";
+import { parsePhone } from "@/lib/phone";
 import { getQuestionType } from "@/question-types/registry";
 import * as schema from "../schema";
 import { CHEM_QUESTIONS, CHEM_TOPICS, DEMO_QUESTIONS, DEMO_TOPICS } from "./demo-content";
+import { DEMO_PHONES } from "./demo-phones";
 import { seedPracticeResults } from "./practice";
 import { seedField } from "./field";
 import { seedShowcase } from "./showcase";
@@ -192,6 +194,15 @@ async function main() {
       .update(schema.profiles)
       .set({ role: u.role, fullName: u.fullName })
       .where(eq(schema.profiles.id, id));
+    // Demo contact numbers, only where none is set, so a number someone entered is never overwritten.
+    const demoPhone = DEMO_PHONES[u.email];
+    const phone = demoPhone && parsePhone(demoPhone.raw, demoPhone.region);
+    if (phone?.ok) {
+      await db
+        .update(schema.profiles)
+        .set({ phone: phone.phone, phoneRegion: phone.region })
+        .where(and(eq(schema.profiles.id, id), isNull(schema.profiles.phone)));
+    }
     ids[u.email] = id;
     console.log(`  ${u.role.padEnd(10)} ${u.email}`);
   }

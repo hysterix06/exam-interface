@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   bigserial,
   boolean,
+  check,
   date,
   doublePrecision,
   index,
@@ -81,10 +82,20 @@ export const profiles = pgTable("profiles", {
   role: userRole("role").notNull().default("student"),
   email: text("email").notNull(),
   fullName: text("full_name"),
+  // Optional contact number (src/lib/phone.ts). `phone` is E.164 ("+" and at most 15 digits);
+  // `phoneRegion` is its ISO 3166-1 alpha-2 region, stored because +1 etc. are shared and national
+  // formatting needs it. Both or neither.
+  phone: text("phone"),
+  phoneRegion: text("phone_region"),
   // Deactivated people can't sign in; their attempts and history stay.
   deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),
   createdAt: createdAt(),
-}, (t) => [index("profiles_org_idx").on(t.orgId)]);
+}, (t) => [
+  index("profiles_org_idx").on(t.orgId),
+  check("profiles_phone_e164", sql`${t.phone} ~ '^[+][1-9][0-9]{1,14}$'`),
+  check("profiles_phone_region_iso", sql`${t.phoneRegion} ~ '^[A-Z]{2}$'`),
+  check("profiles_phone_pair", sql`(${t.phone} IS NULL) = (${t.phoneRegion} IS NULL)`),
+]);
 
 export const courses = pgTable("courses", {
   id: uuid("id").primaryKey().defaultRandom(),

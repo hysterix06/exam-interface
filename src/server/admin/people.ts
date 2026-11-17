@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "@/db/client";
 import { courses, enrollments, profiles } from "@/db/schema";
 import { ROLES, type Role } from "@/lib/auth/roles";
+import { phoneInputSchema, resolvePhoneInput, type StoredPhone } from "@/lib/phone";
 import type { RosterRow } from "@/lib/roster";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { CurrentUser } from "@/server/auth";
@@ -33,6 +34,8 @@ export async function listPeople(orgId: string, f: PeopleFilters = {}) {
       id: profiles.id,
       fullName: profiles.fullName,
       email: profiles.email,
+      phone: profiles.phone,
+      phoneRegion: profiles.phoneRegion,
       role: profiles.role,
       deactivatedAt: profiles.deactivatedAt,
       createdAt: profiles.createdAt,
@@ -81,6 +84,7 @@ const personInput = z.object({
   email: z.email("That email address isn't valid.").transform((e) => e.toLowerCase()),
   role: z.enum(ROLES),
   courseId: z.guid().nullable(),
+  phone: phoneInputSchema.optional(),
 });
 
 async function enrolFor(executor: Pick<typeof db, "insert">, userId: string, role: Role, courseId: string) {
@@ -90,7 +94,7 @@ async function enrolFor(executor: Pick<typeof db, "insert">, userId: string, rol
     .onConflictDoNothing();
 }
 
-async function createAccount(user: CurrentUser, p: { fullName: string | null; email: string; role: Role }) {
+async function createAccount(user: CurrentUser, p: { fullName: string | null; email: string; role: Role; phone?: StoredPhone | null }) {
   const password = tempPassword();
   const { data, error } = await createAdminClient().auth.admin.createUser({
     email: p.email,
@@ -102,7 +106,7 @@ async function createAccount(user: CurrentUser, p: { fullName: string | null; em
   // The on_auth_user_created trigger made the profile as a student; set the role.
   await db
     .update(profiles)
-    .set({ role: p.role, fullName: p.fullName, orgId: user.orgId })
+    .set({ role: p.role, fullName: p.fullName, orgId: user.orgId, phone: p.phone?.phone ?? null, phoneRegion: p.phone?.region ?? null })
     .where(eq(profiles.id, data.user.id));
   return { id: data.user.id, password };
 }
@@ -117,7 +121,10 @@ export async function addPerson(user: CurrentUser, raw: unknown): Promise<Action
   if (existing) return { ok: false, error: "Someone with that email already has an account." };
   if (p.courseId && !(await courseInOrg(user.orgId, p.courseId))) return { ok: false, error: "That course no longer exists." };
 
-  const made = await createAccount(user, p);
+  const phone = p.phone ? resolvePhoneInput(p.phone) : { ok: true as const, value: null };
+  if (!phone.ok) return { ok: false, error: phone.error };
+
+  const made = await createAccount(user, { ...p, phone: phone.value });
   if ("error" in made) return { ok: false, error: made.error! };
   if (p.courseId) await enrolFor(db, made.id, p.role, p.courseId);
   await writeAudit({
@@ -175,7 +182,7 @@ export async function importPeople(
       continue;
     }
     const role = r.role ?? input.defaultRole;
-    const made = await createAccount(user, { fullName: r.fullName, email, role });
+    const made = await createAccount(user, { fullName: r.fullName, email, role, phone: r.phone });
     if ("error" in made) {
       outcomes.push({ email, fullName: r.fullName, status: "failed", error: made.error });
       continue;

@@ -11,6 +11,8 @@ test("student pages", async ({ page }) => {
   await audit(page, "student home");
   await page.goto("/results");
   await audit(page, "results");
+  await page.goto("/account");
+  await audit(page, "account");
   await page.goto("/");
   await page.getByRole("link", { name: /BIO 101 Quiz/ }).first().click();
   await expect(page.getByRole("heading", { name: /BIO 101 Quiz/ })).toBeVisible();

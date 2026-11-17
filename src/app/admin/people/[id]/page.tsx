@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LocalTime } from "@/components/ui/local-time";
 import { PageHeader } from "@/components/ui/page-header";
+import { PhoneLink } from "@/components/ui/phone-link";
 import { Row, RowList } from "@/components/ui/row-list";
 import { Section } from "@/components/ui/section";
 import { db } from "@/db/client";
@@ -49,7 +50,7 @@ export default async function PersonPage({ params }: PageProps<"/admin/people/[i
         meta={p.deactivatedAt ? <Badge>Switched off</Badge> : undefined}
         description={
           <>
-            {p.email} · {ROLE_LABELS[p.role]} · {row.lastSignInAt ? <>last signed in <LocalTime iso={new Date(row.lastSignInAt).toISOString()} format="relative" /></> : "has never signed in"}
+            {p.email} · {p.phone && <><PhoneLink phone={p.phone} region={p.phoneRegion} viewerRegion={user.phoneRegion} /> · </>}{ROLE_LABELS[p.role]} · {row.lastSignInAt ? <>last signed in <LocalTime iso={new Date(row.lastSignInAt).toISOString()} format="relative" /></> : "has never signed in"}
           </>
         }
       />

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { NameForm, PasswordForm } from "@/components/shell/account-forms";
+import { NameForm, PasswordForm, PhoneForm } from "@/components/shell/account-forms";
 import { PageHeader } from "@/components/ui/page-header";
 import { Section } from "@/components/ui/section";
 import { ROLE_LABELS } from "@/lib/auth/roles";
@@ -13,7 +13,10 @@ export default async function AccountPage() {
     <>
       <PageHeader title="Account" description={`${user.email} · ${ROLE_LABELS[user.role]}`} />
       <Section title="Profile">
-        <NameForm name={user.fullName ?? ""} />
+        <div className="grid gap-6">
+          <NameForm name={user.fullName ?? ""} />
+          <PhoneForm phone={user.phone} region={user.phoneRegion} />
+        </div>
       </Section>
       <Section title="Password" description="If you were given a one-time password, set your own here.">
         <PasswordForm />
