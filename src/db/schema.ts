@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   bigserial,
   boolean,
+  date,
   doublePrecision,
   index,
   integer,
@@ -45,6 +46,9 @@ export const gradedBy = pgEnum("graded_by", ["auto", "user"]);
 export const extensionKind = pgEnum("extension_kind", ["multiplier", "minutes"]);
 // A person's part in one course. Instructors only see courses they teach.
 export const courseRole = pgEnum("course_role", ["teacher", "student"]);
+export const assignmentState = pgEnum("assignment_state", ["draft", "published"]);
+export const courseEventKind = pgEnum("course_event_kind", ["class", "deadline", "holiday", "other"]);
+export const apiTokenKind = pgEnum("api_token_kind", ["api", "calendar"]);
 
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -87,8 +91,17 @@ export const courses = pgTable("courses", {
   orgId: orgId(),
   code: text("code"),
   title: text("title").notNull(),
+  // The course homepage: a short blurb, the syllabus (Markdown, rendered by
+  // Prose) and practical details (CourseInfo, src/engine/course.ts).
+  description: text("description"),
+  syllabus: text("syllabus"),
+  term: text("term"),
+  startsOn: date("starts_on", { mode: "string" }),
+  endsOn: date("ends_on", { mode: "string" }),
+  info: jsonb("info").notNull().default({}),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: createdAt(),
+  updatedAt: updatedAt(),
 }, (t) => [index("courses_org_idx").on(t.orgId)]);
 
 export const enrollments = pgTable(
@@ -186,6 +199,8 @@ export const exams = pgTable(
     // Set at publish: question id -> question_versions.id used by this exam.
     lockedVersions: jsonb("locked_versions"),
     state: examState("state").notNull().default("draft"),
+    // Where this exam counts in the course grade (null = not counted).
+    categoryId: uuid("category_id").references(() => gradeCategories.id, { onDelete: "set null" }),
     opensAt: timestamp("opens_at", { withTimezone: true }),
     closesAt: timestamp("closes_at", { withTimezone: true }),
     createdBy: uuid("created_by").references(() => profiles.id),
@@ -399,4 +414,162 @@ export const assets = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index("assets_course_idx").on(t.courseId), uniqueIndex("assets_course_sha_uq").on(t.courseId, t.sha256)],
+);
+
+// A slice of the course grade ("Exams 50%"). Exams and assignments each belong
+// to at most one category; courseGrade() (src/engine/gradebook) does the maths.
+export const gradeCategories = pgTable(
+  "grade_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** Percent of the course grade. */
+    weight: doublePrecision("weight").notNull(),
+    /** Lowest N items in this category are left out. */
+    dropLowest: integer("drop_lowest").notNull().default(0),
+    position: integer("position").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("grade_categories_course_idx").on(t.courseId)],
+);
+
+// Teacher-added calendar entries (lectures, holidays, reminders). Exams and
+// assignments appear on the calendar from their own dates.
+export const courseEvents = pgTable(
+  "course_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    kind: courseEventKind("kind").notNull().default("other"),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    allDay: boolean("all_day").notNull().default(false),
+    location: text("location"),
+    description: text("description"),
+    createdBy: uuid("created_by").references(() => profiles.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index("course_events_course_starts_idx").on(t.courseId, t.startsAt)],
+);
+
+// Homework: instructions, a due date, a text and/or file submission, marked by
+// a person against a rubric. Not an exam: no questions, seeds or attempts.
+export const assignments = pgTable(
+  "assignments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: orgId(),
+    courseId: uuid("course_id")
+      .notNull()
+      .references(() => courses.id),
+    categoryId: uuid("category_id").references(() => gradeCategories.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    instructions: text("instructions"),
+    state: assignmentState("state").notNull().default("draft"),
+    opensAt: timestamp("opens_at", { withTimezone: true }),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    points: doublePrecision("points").notNull().default(10),
+    // AssignmentSettings (src/engine/assignments/settings.ts).
+    settings: jsonb("settings").notNull().default({}),
+    // RubricCriterion[] (src/engine/assignments/rubric.ts).
+    rubric: jsonb("rubric").notNull().default([]),
+    // Grades are visible to students from this moment.
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    createdBy: uuid("created_by").references(() => profiles.id),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("assignments_course_idx").on(t.courseId)],
+);
+
+// One row per hand-in. Resubmitting adds a version; the highest version counts.
+export const submissions = pgTable(
+  "submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assignmentId: uuid("assignment_id")
+      .notNull()
+      .references(() => assignments.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id),
+    version: integer("version").notNull().default(1),
+    text: text("text"),
+    // SubmissionFile[]: bytes live in the private submissions bucket.
+    files: jsonb("files").notNull().default([]),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Whole minutes past the (extended) due date when it was handed in. */
+    lateMinutes: integer("late_minutes").notNull().default(0),
+  },
+  (t) => [
+    unique("submissions_assignment_user_version_uq").on(t.assignmentId, t.userId, t.version),
+    index("submissions_user_idx").on(t.userId),
+  ],
+);
+
+export const submissionGrades = pgTable("submission_grades", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  submissionId: uuid("submission_id")
+    .notNull()
+    .unique()
+    .references(() => submissions.id, { onDelete: "cascade" }),
+  score: doublePrecision("score").notNull(),
+  max: doublePrecision("max").notNull(),
+  // GradeLine[]: rubric lines, late deduction and any adjustment; they sum to score.
+  lines: jsonb("lines").notNull().default([]),
+  ticked: text("ticked").array().notNull().default(sql`'{}'::text[]`),
+  feedback: text("feedback"),
+  latePenalty: jsonb("late_penalty"),
+  // Excused work is left out of the course grade.
+  excused: boolean("excused").notNull().default(false),
+  overrideReason: text("override_reason"),
+  graderId: uuid("grader_id").references(() => profiles.id),
+  gradedAt: timestamp("graded_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// A later due date for one student on one assignment.
+export const assignmentExtensions = pgTable(
+  "assignment_extensions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    assignmentId: uuid("assignment_id")
+      .notNull()
+      .references(() => assignments.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    reason: text("reason"),
+    createdBy: uuid("created_by").references(() => profiles.id),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("assignment_extensions_uq").on(t.assignmentId, t.userId)],
+);
+
+// Personal access: read-only API tokens and private calendar feed URLs. Only a
+// sha256 of the secret is stored; the secret is shown once.
+export const apiTokens = pgTable(
+  "api_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    kind: apiTokenKind("kind").notNull().default("api"),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    /** First characters of the secret, so people can tell tokens apart. */
+    prefix: text("prefix").notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("api_tokens_user_idx").on(t.userId)],
 );

@@ -20,7 +20,7 @@ export function useTableSignal({
   debounceMs = 400,
   enabled = true,
 }: {
-  table: "exams" | "attempts";
+  table: "exams" | "attempts" | "assignments" | "submissions";
   filter?: string;
   onSignal: () => void;
   fallbackMs?: number;

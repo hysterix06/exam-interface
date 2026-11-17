@@ -57,6 +57,20 @@
       "when": 1794881913552,
       "tag": "20261117021833_attempt_flow",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794928141906,
+      "tag": "20261117150901_academics",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794928152115,
+      "tag": "20261117150912_academics_rls",
+      "breakpoints": true
     }
   ]
 }
