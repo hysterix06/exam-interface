@@ -34,11 +34,11 @@ export function SidebarNav({ groups, onNavigate }: { groups: NavGroup[]; onNavig
   const pathname = usePathname();
   const current = activeHref(pathname, groups);
   return (
-    <nav aria-label="Main" className="grid gap-6">
+    <nav aria-label="Main" className="grid gap-8">
       {groups.map((g, i) => (
         <div key={g.label ?? i}>
-          {g.label ? <p className="mb-1 px-3 text-xs font-medium text-muted-foreground">{g.label}</p> : null}
-          <ul className="grid gap-px">
+          {g.label ? <p className="mb-2 px-3 text-xs font-medium text-muted-foreground">{g.label}</p> : null}
+          <ul className="grid gap-0.5">
             {g.items.map((item) => {
               const active = item.href === current;
               return (
@@ -48,9 +48,9 @@ export function SidebarNav({ groups, onNavigate }: { groups: NavGroup[]; onNavig
                     onClick={onNavigate}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "relative flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                      "aria-[current=page]:bg-muted aria-[current=page]:font-medium aria-[current=page]:text-foreground",
-                      "aria-[current=page]:before:absolute aria-[current=page]:before:inset-y-1.5 aria-[current=page]:before:left-0 aria-[current=page]:before:w-0.5 aria-[current=page]:before:rounded-full aria-[current=page]:before:bg-brand",
+                      "relative flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      "aria-[current=page]:bg-background aria-[current=page]:font-medium aria-[current=page]:shadow-xs aria-[current=page]:text-foreground",
+                      "aria-[current=page]:before:absolute aria-[current=page]:before:inset-y-2 aria-[current=page]:before:left-0 aria-[current=page]:before:w-0.5 aria-[current=page]:before:rounded-full aria-[current=page]:before:bg-brand",
                     )}
                   >
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>

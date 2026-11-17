@@ -12,7 +12,7 @@ export function LoginForm() {
   const [state, action, pending] = useActionState(signIn, initialState);
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form action={action} className="flex flex-col gap-5">
       <div className="flex flex-col gap-2">
         <Label htmlFor="email">Email</Label>
         <Input id="email" name="email" type="email" autoComplete="email" required />
@@ -32,7 +32,7 @@ export function LoginForm() {
           {state.error}
         </p>
       )}
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" size="lg" className="mt-2" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}
       </Button>
     </form>

@@ -1,6 +1,6 @@
-# Exam
+# Modus
 
-An exam app built to show how much a testing tool can do when every decision is deterministic and explainable. Educators build question banks and exams, check them before anyone sits them, run them live and read the results. Students sit exams on a nearly empty screen. Every score, every drawn question and every number on a dashboard can be traced back to a rule and its inputs.
+*Modus* (from *modus ponens*, the basic rule of inference) is an exam app built to show how much a testing tool can do when every decision is deterministic and explainable. Educators build question banks and exams, check them before anyone sits them, run them live and read the results. Students sit exams on a nearly empty screen. Every score, every drawn question and every number on a dashboard can be traced back to a rule and its inputs.
 
 There is **no AI** anywhere in it. Selection, randomisation, grading, adaptive paths and analytics are plain rules and statistics that an educator can follow and check by hand.
 

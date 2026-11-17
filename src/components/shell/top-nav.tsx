@@ -18,7 +18,7 @@ export function TopNav({ items }: { items: { href: string; label: string; also?:
             key={item.href}
             href={item.href}
             aria-current={active ? "page" : undefined}
-            className="relative rounded-md px-2.5 py-1.5 text-muted-foreground hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-2.5 aria-[current=page]:after:-bottom-[13px] aria-[current=page]:after:h-0.5 aria-[current=page]:after:bg-brand"
+            className="relative rounded-md px-2.5 py-1.5 text-muted-foreground hover:text-foreground aria-[current=page]:text-foreground aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-2.5 aria-[current=page]:after:-bottom-[17px] aria-[current=page]:after:h-0.5 aria-[current=page]:after:bg-brand"
           >
             {item.label}
           </Link>

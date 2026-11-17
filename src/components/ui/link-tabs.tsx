@@ -18,10 +18,10 @@ export interface LinkTab {
 function LinkTabs({ tabs, label, className }: { tabs: LinkTab[]; label: string; className?: string }) {
   const pathname = usePathname()
   return (
-    <nav aria-label={label} className={cn("-mx-1 mb-8 flex gap-1 overflow-x-auto border-b px-1 text-sm", className)}>
+    <nav aria-label={label} className={cn("-mx-1 mb-10 flex gap-2 overflow-x-auto border-b px-1 text-sm", className)}>
       {tabs.map((t) => {
         const active = t.exact ? pathname === t.href : pathname === t.href || pathname.startsWith(`${t.href}/`)
-        const cls = "-mb-px flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2 whitespace-nowrap"
+        const cls = "-mb-px flex items-center gap-1.5 border-b-2 border-transparent px-3 py-3 whitespace-nowrap"
         if (t.disabledReason) {
           return (
             <span key={t.href} className={cn(cls, "cursor-not-allowed text-muted-foreground/50")} title={t.disabledReason} aria-disabled="true">

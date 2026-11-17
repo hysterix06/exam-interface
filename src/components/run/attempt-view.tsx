@@ -61,7 +61,7 @@ export function AttemptView(p: AttemptViewProps) {
     <div className={p.printMode ? "grid gap-8 break-after-page" : "grid gap-8"}>
       <header className="grid gap-2">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">{p.student}</h1>
+          <h1 className="font-serif text-[1.875rem] leading-tight font-semibold tracking-tight">{p.student}</h1>
           <Badge>{p.state.replace("_", " ")}</Badge>
           {p.isPreview && <Badge tone="brand">Preview</Badge>}
           {!p.printMode && (

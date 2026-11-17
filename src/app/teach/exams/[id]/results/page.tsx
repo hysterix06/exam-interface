@@ -1,3 +1,5 @@
+import { ChevronDown } from "lucide-react";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -59,15 +61,24 @@ export default async function ResultsPage({ params }: PageProps<"/teach/exams/[i
               <Button asChild variant="ghost" size="sm">
                 <Link href={`${base}/results/signals`}>Signals</Link>
               </Button>
-              <Button asChild variant="ghost" size="sm">
-                <Link href={`${base}/results/print`}>Print all</Link>
-              </Button>
-              <Button asChild variant="ghost" size="sm">
-                <a href={`${base}/export?format=items`}>Answers CSV</a>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <a href={`${base}/export`}>Export CSV</a>
-              </Button>
+              <Menu>
+                <MenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    Export <ChevronDown />
+                  </Button>
+                </MenuTrigger>
+                <MenuContent>
+                  <MenuItem asChild>
+                    <a href={`${base}/export`}>Scores (CSV)</a>
+                  </MenuItem>
+                  <MenuItem asChild>
+                    <a href={`${base}/export?format=items`}>Answers (CSV)</a>
+                  </MenuItem>
+                  <MenuItem asChild>
+                    <Link href={`${base}/results/print`}>Print all</Link>
+                  </MenuItem>
+                </MenuContent>
+              </Menu>
             </>
           ) : null
         }

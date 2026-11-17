@@ -22,19 +22,19 @@ function PageHeader({
   className?: string
 }) {
   return (
-    <header className={cn("mb-8", className)}>
+    <header className={cn("mb-12", className)}>
       {back ? (
-        <Link href={back.href} className="mb-3 inline-block text-sm text-muted-foreground hover:text-foreground">
+        <Link href={back.href} className="mb-4 inline-block text-sm text-muted-foreground hover:text-foreground">
           ← {back.label}
         </Link>
       ) : null}
-      <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+      <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight text-balance">{title}</h1>
+            <h1 className="font-serif text-[1.875rem] leading-tight font-semibold tracking-tight text-balance">{title}</h1>
             {meta}
           </div>
-          {description ? <p className="mt-1 max-w-prose text-sm text-muted-foreground">{description}</p> : null}
+          {description ? <p className="mt-2 max-w-prose text-[0.9375rem] text-muted-foreground">{description}</p> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>

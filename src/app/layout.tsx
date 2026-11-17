@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans, IBM_Plex_Serif } from "next/font/google";
 import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({
@@ -14,9 +14,17 @@ const plexMono = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
+// Page titles and the wordmark. Plex's own serif, so it sits with the sans without a seam.
+const plexSerif = IBM_Plex_Serif({
+  variable: "--font-plex-serif",
+  subsets: ["latin"],
+  weight: ["500", "600"],
+});
+
 export const metadata: Metadata = {
-  title: { default: "Exam", template: "%s · Exam" },
-  description: "Deterministic, explainable exams.",
+  title: { default: "Modus", template: "%s · Modus" },
+  description: "Exams you can reason about: every question reproducible, every score explained.",
+  applicationName: "Modus",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -25,7 +33,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       // The theme class is set by the inline script below before first paint.
       suppressHydrationWarning
-      className={`${plexSans.variable} ${plexMono.variable} h-full antialiased`}
+      className={`${plexSans.variable} ${plexSerif.variable} ${plexMono.variable} h-full antialiased`}
     >
       <head>
         <script

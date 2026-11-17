@@ -63,7 +63,8 @@ test("an instructor can watch a live attempt, grant time, and read the results",
   await staff.goBack();
   const read = async (link: string) => {
     const download = staff.waitForEvent("download");
-    await staff.getByRole("link", { name: link }).click();
+    await staff.getByRole("button", { name: "Export" }).click();
+    await staff.getByRole("menuitem", { name: link }).click();
     const csv = await (await download).createReadStream();
     return new Promise<string>((resolve) => {
       let out = "";
@@ -71,11 +72,11 @@ test("an instructor can watch a live attempt, grant time, and read the results",
       csv.on("end", () => resolve(out));
     });
   };
-  const summary = await read("Export CSV");
+  const summary = await read("Scores (CSV)");
   expect(summary.split("\r\n")[0]).toBe("Student,Email,Status,Score,Out of,Percent,Started,Submitted,Extra time,Tab switches,Pastes,Attempt ID,Seed,Minutes late,Late penalty (points)");
   expect(summary).toContain("student@example.com");
   expect(summary).toContain("+10 min");
-  const answers = await read("Answers CSV");
+  const answers = await read("Answers (CSV)");
   expect(answers.split("\r\n")[0]).toBe("Student,Email,Attempt ID,Question #,Question,Topic,Version,Score,Out of,Graded by,Needs marking,Score changed by hand");
   expect(answers).toContain("Playwright override");
 

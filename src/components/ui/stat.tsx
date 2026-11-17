@@ -24,23 +24,23 @@ function Stat({
   const body = (
     <>
       <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
+      <dd className="mt-2 text-[1.75rem] leading-none font-semibold tracking-tight tabular-nums">
         {explain && !href ? <Explain explanation={explain}>{value}</Explain> : value}
       </dd>
-      {hint ? <dd className="mt-0.5 text-xs text-muted-foreground">{hint}</dd> : null}
+      {hint ? <dd className="mt-2 text-xs text-muted-foreground">{hint}</dd> : null}
     </>
   )
   return href ? (
-    <Link href={href} className={cn("block rounded-lg border px-4 py-3 transition-colors hover:bg-muted/50", className)}>
+    <Link href={href} className={cn("block border-t border-foreground/20 pt-4 transition-colors hover:border-foreground", className)}>
       <dl>{body}</dl>
     </Link>
   ) : (
-    <dl className={cn("rounded-lg border px-4 py-3", className)}>{body}</dl>
+    <dl className={cn("border-t border-foreground/20 pt-4", className)}>{body}</dl>
   )
 }
 
 function StatGrid({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("grid grid-cols-2 gap-3 sm:grid-cols-4", className)}>{children}</div>
+  return <div className={cn("grid grid-cols-2 gap-x-8 gap-y-8 sm:grid-cols-4", className)}>{children}</div>
 }
 
 export { Stat, StatGrid }

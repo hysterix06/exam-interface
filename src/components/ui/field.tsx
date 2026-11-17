@@ -14,7 +14,7 @@ function Field({
   children: React.ReactNode
 }) {
   return (
-    <label className={cn("grid gap-1.5 text-sm", className)}>
+    <label className={cn("grid gap-2 text-sm", className)}>
       <span className="font-medium">{label}</span>
       {children}
       {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}

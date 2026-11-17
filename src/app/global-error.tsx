@@ -10,7 +10,7 @@ export default function GlobalError({ error, retry }: ErrorProps) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <title>Something went wrong · Exam</title>
+        <title>Something went wrong · Modus</title>
         <script
           dangerouslySetInnerHTML={{
             __html: `try{var t=localStorage.getItem("theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark")}catch(e){}`,

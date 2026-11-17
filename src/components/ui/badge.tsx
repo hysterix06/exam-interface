@@ -4,12 +4,12 @@ import { cn } from "cn"
 
 // Quiet, squared labels. Colour is carried by the text, never a fill.
 const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-sm border px-1.5 py-px text-xs font-medium whitespace-nowrap",
+  "inline-flex items-center gap-1 rounded-full border px-2 py-px text-xs font-medium whitespace-nowrap",
   {
     variants: {
       tone: {
         neutral: "border-border text-muted-foreground",
-        strong: "border-foreground/80 text-foreground",
+        strong: "border-foreground/40 text-foreground",
         success: "border-success/35 text-success",
         warning: "border-warning/40 text-warning",
         danger: "border-destructive/35 text-destructive",

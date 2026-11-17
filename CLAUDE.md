@@ -1,8 +1,8 @@
 @AGENTS.md
 
-# Exam
+# Modus
 
-A showcase exam app: the UI is the product. `README.md` describes the app as built (features, types, engine, data model, setup).
+Modus is a showcase exam app: the UI is the product. `README.md` describes the app as built (features, types, engine, data model, setup).
 
 ## Principles
 
@@ -28,7 +28,8 @@ A showcase exam app: the UI is the product. `README.md` describes the app as bui
   - Old `/author/*`, `/admin/exams/*`, `/admin/review`, `/admin/audit` URLs redirect (`next.config.ts`).
 - **Course scope.** `enrollments.role` is `teacher | student`. `scopeFor(user)` (`src/server/access.ts`) gives the course ids a person may teach (`null` = whole org for admins); every staff data function takes that `Scope` and filters with `inScope()`. Anything outside scope is a 404, not a 403. Ids from the browser are validated with `z.guid()` (seed ids aren't RFC v4, so `z.uuid()` rejects them).
 - **Server layout:** `src/server/authoring` (questions, topics, exams), `src/server/run` (live board, extensions, regrade, analysis, similarity `signals.ts`), `src/server/attempts` (student side: start, take/advance, save, `upload.ts`, `adaptive.ts`), `src/server/review.ts` (marking), `src/server/assets.ts` (uploads), `src/server/teach` (instructor home + exam workspace loader), `src/server/admin` (people, courses, org). Account management and storage use `src/lib/supabase/admin.ts` (needs `SUPABASE_SECRET_KEY`, server-only).
-- **Design tokens** (`src/app/globals.css`): black and white. The only colour is `--brand` (deep blue), allowed for the focus ring, the current nav item, links in running text, and the one primary action of a screen whose purpose is that action (Start exam, Publish). `success`/`warning`/`destructive` are for text and icons, never fills. Build pages from `src/components/ui` (`PageHeader`, `Section`, `RowList`/`Row`, `Table`, `Stat`, `EmptyState`, `Notice`, `LinkTabs`, `Dialog`, `Menu`, `LocalTime`) rather than hand-rolled markup.
+- **Brand:** the name is Modus; the mark is ∴ (`LogoMark` / `Wordmark` in `src/components/shell/logo.tsx`, favicon `src/app/icon.svg`). Page titles and the wordmark use `font-serif` (IBM Plex Serif); everything else Plex Sans. The attempt screen stays sans and chrome-free.
+- **Design tokens** (`src/app/globals.css`): black and white. Hierarchy comes from size and space, not boxes: stats sit under a hairline, not in cards. The only colour is `--brand` (deep blue), allowed for the focus ring, the current nav item, links in running text, and the one primary action of a screen whose purpose is that action (Start exam, Publish). `success`/`warning`/`destructive` are for text and icons, never fills. Build pages from `src/components/ui` (`PageHeader`, `Section`, `RowList`/`Row`, `Table`, `Stat`, `EmptyState`, `Notice`, `LinkTabs`, `Dialog`, `Menu`, `LocalTime`) rather than hand-rolled markup.
 - **Purity rule (lint-enforced):** `src/engine/**` and `src/question-types/*/core.ts` must not import React, Next, or anything DB-related.
 - **Question type plugin** = `src/question-types/<id>/core.ts` (pure) + `ui.tsx` (Editor, Renderer, `newDef`; client-only). Register the core in `src/question-types/registry.ts`, the UI in `ui-registry.ts` (server components must never import the UI registry) and add fixtures to `src/question-types/fixtures.ts`; `contract.test.ts` then runs it over 1,000 seeds. Contract (`src/engine/question-type.ts`):
   ```ts

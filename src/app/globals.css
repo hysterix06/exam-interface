@@ -13,6 +13,10 @@
 }
 
 /*
+ * Modus. Page titles and the wordmark are set in Plex Serif; everything else
+ * in Plex Sans. Hierarchy comes from size and space, not boxes: prefer a
+ * hairline or whitespace to a bordered card.
+ *
  * Black and white, with one deep blue (--brand) used sparingly: the focus
  * ring, the current nav item, links in running text, and the single primary
  * action on a screen whose whole purpose is that action (Start exam, Publish).
@@ -23,6 +27,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-plex-sans);
+  --font-serif: var(--font-plex-serif);
   --font-mono: var(--font-plex-mono);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
@@ -51,7 +56,7 @@
 }
 
 :root {
-  --radius: 0.375rem;
+  --radius: 0.5rem;
   --brand: oklch(0.37 0.11 262);
   --brand-foreground: oklch(0.99 0 0);
   --success: oklch(0.46 0.09 155);
@@ -71,7 +76,7 @@
   --muted-foreground: oklch(0.46 0 0);
   --accent: oklch(0.955 0 0);
   --accent-foreground: oklch(0.16 0 0);
-  --border: oklch(0.915 0 0);
+  --border: oklch(0.925 0 0);
   --input: oklch(0.88 0 0);
   --ring: var(--brand);
 }

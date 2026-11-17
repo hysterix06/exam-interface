@@ -27,7 +27,7 @@ function Notice({
   return (
     <div
       role={live ? (tone === "error" ? "alert" : "status") : undefined}
-      className={cn("flex items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm", TONES[tone], className)}
+      className={cn("flex items-start gap-2.5 rounded-lg border px-4 py-3 text-sm", TONES[tone], className)}
     >
       <Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
       <div className="min-w-0 flex-1">{children}</div>

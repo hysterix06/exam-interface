@@ -19,8 +19,8 @@ export const metadata: Metadata = { title: "Exams" };
 function NowCard({ e }: { e: StudentExam }) {
   const resume = e.inProgressId !== null;
   return (
-    <li className="rounded-lg border p-5 sm:p-6">
-      <div className="flex flex-wrap items-start gap-x-6 gap-y-4">
+    <li className="rounded-xl border p-6 sm:p-7">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-8">
         <div className="min-w-0 flex-1">
           <p className="text-sm text-muted-foreground">{e.courseTitle}</p>
           <h2 className="mt-0.5 text-xl font-semibold tracking-tight">
@@ -28,7 +28,7 @@ function NowCard({ e }: { e: StudentExam }) {
               {e.title}
             </Link>
           </h2>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-3 text-sm text-muted-foreground">
             {resume && e.deadlineAt ? (
               <>
                 In progress · time runs out <LocalTime iso={e.deadlineAt} format="relative" />
@@ -48,7 +48,7 @@ function NowCard({ e }: { e: StudentExam }) {
             )}
           </p>
         </div>
-        <Button asChild size="lg" className="bg-brand text-brand-foreground hover:bg-brand/90">
+        <Button asChild size="lg" className="w-full bg-brand text-brand-foreground hover:bg-brand/90 sm:w-auto">
           <Link href={`/exams/${e.id}`}>{resume ? "Resume" : "Start"}</Link>
         </Button>
       </div>
@@ -71,7 +71,7 @@ export default async function StudentHome() {
   return (
     <>
       <RefreshOnChange boundaries={exams.flatMap((e) => [e.opensAt, e.closesAt])} />
-      <h1 className="mb-8 text-2xl font-semibold tracking-tight">{first ? `Hi, ${first}` : "Your exams"}</h1>
+      <h1 className="mb-12 font-serif text-[1.875rem] leading-tight font-semibold tracking-tight">{first ? `Hi, ${first}` : "Your exams"}</h1>
 
       {courses.length === 0 ? (
         <EmptyState>You’re not enrolled in any course yet. Once your instructor or school adds you, your exams appear here.</EmptyState>
@@ -81,7 +81,7 @@ export default async function StudentHome() {
         <>
           {now.length > 0 ? (
             <Section title="Ready for you">
-              <ul className="grid gap-3">
+              <ul className="grid gap-4">
                 {now.map((e) => (
                   <NowCard key={e.id} e={e} />
                 ))}

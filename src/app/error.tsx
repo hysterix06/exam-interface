@@ -9,7 +9,7 @@ export default function RootError({ error, retry }: ErrorProps) {
   const digest = errorDigest(error);
   return (
     <main id="main" className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-4 px-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Something went wrong</h1>
+      <h1 className="font-serif text-[1.875rem] leading-tight font-semibold tracking-tight">Something went wrong</h1>
       <p className="text-sm text-muted-foreground">
         Your work is saved on the server. Try again, and if it keeps happening, tell your instructor
         {digest ? ` and quote reference ${digest}` : ""}.
