@@ -2,7 +2,7 @@
 
 # Modus
 
-Modus is a showcase exam app: the UI is the product. `README.md` describes the app as built (features, types, engine, data model, setup).
+Modus is a showcase exam app: the UI is the product. `README.md` is the overview; details live in `docs/` (architecture, question-types, engine, exam-lifecycle, widgets, development).
 
 ## Principles
 
@@ -25,8 +25,7 @@ Modus is a showcase exam app: the UI is the product. `README.md` describes the a
   - **Students** `/` (route group `src/app/(student)/`): top bar, home = what to sit now / coming up / finished, `/results`, `/exams/[id]`. `/attempt/[id]` has no shell.
   - **Instructors** `/teach/*`: sidebar; home is an attention queue (live, to mark, to release, failing drafts). One exam = one workspace at `/teach/exams/[id]` with tabs Build (autosaves) · Verify (pre-flight, preview, publish) · Run (state, window, codes, live board, extensions) · Results (attempts, analysis, regrade, export).
   - **Admins** `/admin/*`: operator console: people (add with one-time password, CSV import, role, switch off), courses (teachers + enrolment, archive), activity (audit log), settings (org defaults new exams start from). Admins can also use every `/teach` page for any course.
-  - Old `/author/*`, `/admin/exams/*`, `/admin/review`, `/admin/audit` URLs redirect (`next.config.ts`).
-- **Course scope.** `enrollments.role` is `teacher | student`. `scopeFor(user)` (`src/server/access.ts`) gives the course ids a person may teach (`null` = whole org for admins); every staff data function takes that `Scope` and filters with `inScope()`. Anything outside scope is a 404, not a 403. Ids from the browser are validated with `z.guid()` (seed ids aren't RFC v4, so `z.uuid()` rejects them).
+  - **Course scope.** `enrollments.role` is `teacher | student`. `scopeFor(user)` (`src/server/access.ts`) gives the course ids a person may teach (`null` = whole org for admins); every staff data function takes that `Scope` and filters with `inScope()`. Anything outside scope is a 404, not a 403. Ids from the browser are validated with `z.guid()` (seed ids aren't RFC v4, so `z.uuid()` rejects them).
 - **Server layout:** `src/server/authoring` (questions, topics, exams), `src/server/run` (live board, extensions, regrade, analysis, similarity `signals.ts`), `src/server/attempts` (student side: start, take/advance, save, `upload.ts`, `adaptive.ts`), `src/server/review.ts` (marking), `src/server/assets.ts` (uploads), `src/server/teach` (instructor home + exam workspace loader), `src/server/admin` (people, courses, org). Account management and storage use `src/lib/supabase/admin.ts` (needs `SUPABASE_SECRET_KEY`, server-only).
 - **Brand:** the name is Modus; the mark is ∴ (`LogoMark` / `Wordmark` in `src/components/shell/logo.tsx`, favicon `src/app/icon.svg`). Page titles and the wordmark use `font-serif` (IBM Plex Serif); everything else Plex Sans. The attempt screen stays sans and chrome-free.
 - **Design tokens** (`src/app/globals.css`): black and white. Hierarchy comes from size and space, not boxes: stats sit under a hairline, not in cards. The only colour is `--brand` (deep blue), allowed for the focus ring, the current nav item, links in running text, and the one primary action of a screen whose purpose is that action (Start exam, Publish). `success`/`warning`/`destructive` are for text and icons, never fills. Build pages from `src/components/ui` (`PageHeader`, `Section`, `RowList`/`Row`, `Table`, `Stat`, `EmptyState`, `Notice`, `LinkTabs`, `Dialog`, `Menu`, `LocalTime`) rather than hand-rolled markup.
@@ -62,7 +61,7 @@ Modus is a showcase exam app: the UI is the product. `README.md` describes the a
 - **Adaptive** (`settings.adaptive`): the plan (pool + Rasch difficulties) is frozen in `attempts.plan` at start; items are created one step at a time (`src/server/attempts/adaptive.ts`), each storing its trace and the previous result it used in `attempt_items.selection`. Finalize fills unreached steps as unanswered. Reproduce replays with `replayAdaptive()`. Hand-marked types are excluded from adaptive pools.
 - **Own RNG** (`src/engine/rng.ts`: `sfc32` seeded by `cyrb128`), pinned by golden tests in `rng.test.ts`. Never change it. Per-question seed = `hash(attempt.seed + ":" + questionVersionId)`.
 
-## Data model (README §7, see `src/db/schema.ts`)
+## Data model (see `docs/architecture.md` and `src/db/schema.ts`)
 
 `orgs`, `profiles` (1:1 `auth.users`), `courses`, `enrollments`, `topics`, `questions` (editable) + `question_versions` (immutable; exams and attempts reference these), `exams` (blueprint/settings JSONB, `locked_versions` at publish), `exam_codes` (hashed, single-use), `attempts` (seed, deadline, `cursor`, `late_window_minutes`/`late_penalty`, `last_seen_at`, adaptive `plan`), `attempt_items` (**frozen generated instance**, `opened_at`/`locked_at`, adaptive `selection`), `responses`, `grades` (with `lines`), `events` (signals and `view`s, never enforced), `audit_log`, `extensions`, `assets` (uploads; bytes in Storage).
 
