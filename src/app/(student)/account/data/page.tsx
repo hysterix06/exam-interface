@@ -56,7 +56,7 @@ export default async function YourDataPage() {
           <pre className="overflow-x-auto rounded-md border bg-muted/40 p-3 font-mono text-xs">{`curl -H "Authorization: Bearer <token>" ${origin}/api/v1/me\ncurl -H "Authorization: Bearer <token>" ${origin}/api/v1/assignments`}</pre>
           <p>
             Every endpoint is described in{" "}
-            <a href="/api/v1/openapi.json" className="text-brand underline-offset-4 hover:underline">
+            <a href="/api/v1/openapi.json" className="text-brand underline underline-offset-4">
               openapi.json
             </a>{" "}
             (open it in any OpenAPI viewer or Postman).

@@ -9,8 +9,8 @@ test("sign-in page", async ({ page }) => {
 test("student pages", async ({ page }) => {
   await signIn(page, "student@example.com");
   await audit(page, "student home");
-  await page.goto("/results");
-  await audit(page, "results");
+  await page.goto("/grades");
+  await audit(page, "grades");
   await page.goto("/account");
   await audit(page, "account");
   await page.goto("/");

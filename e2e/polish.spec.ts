@@ -6,7 +6,7 @@ test.describe("phone layout (375px)", () => {
 
   test("student pages fit without sideways scrolling", async ({ page }) => {
     await signIn(page, "student@example.com");
-    for (const path of ["/", "/results", "/account"]) {
+    for (const path of ["/", "/grades", "/calendar", "/account"]) {
       await page.goto(path);
       const o = await overflow(page);
       expect(o.scroll, `${path} overflows`).toBeLessThanOrEqual(o.view);

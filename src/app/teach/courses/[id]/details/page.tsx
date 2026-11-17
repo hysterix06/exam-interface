@@ -12,7 +12,7 @@ export default async function CourseDetailsPage({ params }: PageProps<"/teach/co
     <>
       <p className="mb-8 text-sm text-muted-foreground">
         What students see on the course page. Grade weights are on the{" "}
-        <Link href={`/teach/courses/${id}/grading`} className="text-brand underline-offset-4 hover:underline">
+        <Link href={`/teach/courses/${id}/grading`} className="text-brand underline underline-offset-4">
           Grading
         </Link>{" "}
         tab.
