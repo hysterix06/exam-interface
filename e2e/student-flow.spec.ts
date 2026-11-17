@@ -30,8 +30,11 @@ test("student starts from home, answers, resumes after reload, submits", async (
   await dialog.getByRole("button", { name: "Submit" }).click();
   await expect(page).toHaveURL(/\/results\//);
 
-  // It shows up under Results.
-  await page.getByRole("link", { name: "Results", exact: true }).click();
+  // Results became part of Grades; an open quiz that can be retaken is not "finished" yet, so the
+  // submitted attempt shows in the course's work list.
+  await page.getByRole("link", { name: "Grades", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Grades", level: 1 })).toBeVisible();
+  await page.goto("/courses/00000000-0000-0000-0000-0000000000c1/work");
   await expect(page.getByRole("link", { name: /BIO 101 Quiz/ }).first()).toBeVisible();
 });
 

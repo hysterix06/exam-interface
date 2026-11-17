@@ -158,7 +158,8 @@ test("a missing page says so and offers a way home", async ({ page }) => {
 
 test("the skip link jumps past the navigation", async ({ page }) => {
   await signIn(page, "student@example.com");
-  await page.goto("/results");
+  // /results redirects to /grades; go straight there so Tab can't race the redirect.
+  await page.goto("/grades");
   await page.keyboard.press("Tab");
   const skip = page.getByRole("link", { name: "Skip to content" });
   await expect(skip).toBeFocused();

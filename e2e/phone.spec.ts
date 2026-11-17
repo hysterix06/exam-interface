@@ -92,17 +92,19 @@ test("an admin adds a person with a phone number", async ({ page }) => {
   await dialog.getByLabel("Name").fill("Phoebe Phone");
   await dialog.getByLabel("Email").fill(email);
   await dialog.getByLabel("Phone (optional) country").selectOption("GB");
-  await dialog.getByLabel("Phone (optional)", { exact: true }).pressSequentially("02079460958");
-  await expect(dialog.getByLabel("Phone (optional)", { exact: true })).toHaveValue("020 7946 0958");
+  // A number no seeded account shares, so the assertions below can only be about this person.
+  await dialog.getByLabel("Phone (optional)", { exact: true }).pressSequentially("02079460321");
+  await expect(dialog.getByLabel("Phone (optional)", { exact: true })).toHaveValue("020 7946 0321");
   await dialog.getByRole("button", { name: "Add person" }).click();
   await expect(dialog.locator("code")).toBeVisible();
   await dialog.getByRole("button", { name: "Done" }).click();
 
   // The admin has no number of their own, so it is shown internationally.
   await page.getByRole("textbox", { name: "Search people" }).fill(email);
-  const link = page.getByRole("link", { name: TEACHER.international });
+  const row = page.getByRole("row", { name: /Phoebe Phone/ });
+  const link = row.getByRole("link", { name: "+44 20 7946 0321" });
   await expect(link).toBeVisible();
-  await expect(link).toHaveAttribute("href", TEACHER.href);
+  await expect(link).toHaveAttribute("href", "tel:+442079460321");
 });
 
 test("a bad number in an import is reported on its own line", async ({ page }) => {

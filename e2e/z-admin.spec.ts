@@ -7,7 +7,8 @@ test("an instructor can watch a live attempt, grant time, and read the results",
   const student = await studentCtx.newPage();
   await signIn(student, "student@example.com");
   await student.getByRole("link", { name: /BIO 101 Quiz/ }).first().click();
-  await student.getByRole("button", { name: /start exam/i }).click();
+  // Earlier specs may already have started this student's attempt; either way it is in progress.
+  await student.getByRole("button", { name: /start exam|resume/i }).click();
   await expect(student).toHaveURL(/\/attempt\//);
 
   const staffCtx = await browser.newContext();
