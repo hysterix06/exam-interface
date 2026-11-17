@@ -31,15 +31,14 @@ export default async function MarkingPage() {
             {handIns.map((a) => (
               <Row key={a.id} href={`/teach/assignments/${a.id}/handins`} title={a.title} detail={a.courseTitle} aside={<span className="tabular-nums">{plural(a.pending, "hand-in")}</span>} />
             ))}
-          </RowList>
+            </RowList>
         </Section>
       )}
       {exams.length === 0 ? (
-        handIns.length > 0 ? null :
-        <EmptyState>Nothing to mark. You’re all caught up.</EmptyState>
+        handIns.length === 0 && <EmptyState>Nothing to mark. You’re all caught up.</EmptyState>
       ) : (
         <Section title={handIns.length ? "Exams" : undefined}>
-        <RowList>
+          <RowList>
           {exams.map((e) => (
             <Row
               key={e.id}
@@ -49,7 +48,7 @@ export default async function MarkingPage() {
               aside={<span className="tabular-nums">{plural(e.pending, "answer")}</span>}
             />
           ))}
-        </RowList>
+          </RowList>
         </Section>
       )}
     </>
