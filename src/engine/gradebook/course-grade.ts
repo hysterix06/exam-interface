@@ -1,4 +1,5 @@
 import { fmtNum, roundScore } from "../grading/format";
+import type { Explanation } from "../types";
 
 // The course grade, worked out the way a syllabus describes it, with every
 // step written down so a student or educator can check it by hand:
@@ -33,6 +34,7 @@ export interface CategoryGrade {
   id: string;
   name: string;
   weight: number;
+  dropLowest: number;
   /** Share of the course grade after scaling (0 when left out). */
   effectiveWeight: number;
   /** Percent in this category, or null when nothing is graded. */
@@ -70,6 +72,7 @@ function categoryGrade(c: GradeCategoryInput, items: GradebookItem[]): CategoryG
     id: c.id,
     name: c.name,
     weight: c.weight,
+    dropLowest: c.dropLowest,
     effectiveWeight: 0,
     percent: max > 0 ? roundScore((earned / max) * 100) : null,
     earned,
@@ -136,4 +139,16 @@ export function courseGrade(categories: readonly GradeCategoryInput[], items: re
   const working = active.map((g) => `${pct(g.percent ?? 0)} × ${fmtNum(Math.round(g.effectiveWeight * 10) / 10)}%`).join(" + ");
   lines.push(`Course grade: ${active.length > 1 ? `${working} = ` : ""}${pct(percent)}.`);
   return { percent, categories: grades, uncounted, lines };
+}
+
+/** The same working as an Explanation, for the clickable number. */
+export function courseGradeExplanation(g: CourseGrade): Explanation {
+  const counted = g.categories.filter((c) => c.percent !== null && c.effectiveWeight > 0);
+  return {
+    formula: g.categories.length
+      ? "In each category, points earned ÷ points available; then each category counts by its weight. Categories with nothing graded yet are left out and the others scaled up."
+      : "Points earned ÷ points available, over everything graded so far.",
+    inputs: counted.map((c) => ({ label: `${c.name} (${fmtNum(c.weight)}%)`, value: `${pct(c.percent ?? 0)} of ${fmtNum(Math.round(c.effectiveWeight * 10) / 10)}%` })),
+    note: g.lines.at(-1),
+  };
 }

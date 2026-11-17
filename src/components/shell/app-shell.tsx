@@ -4,10 +4,10 @@ import { scopeFor } from "@/server/access";
 import type { CurrentUser } from "@/server/auth";
 import { listCourses } from "@/server/authoring/data";
 import { listReviewExams } from "@/server/review";
+import { studentAcademics } from "@/server/student/academics";
 import { AccountMenu } from "./account-menu";
 import { Wordmark } from "./logo";
 import { MobileNav, type NavGroup, SidebarNav } from "./sidebar-nav";
-import { TopNav } from "./top-nav";
 
 function SkipLink() {
   return (
@@ -54,10 +54,35 @@ async function staffNav(user: CurrentUser): Promise<NavGroup[]> {
   ];
 }
 
-function StaffShell({ user, groups, children }: { user: CurrentUser; groups: NavGroup[]; children: React.ReactNode }) {
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function studentNav(user: CurrentUser): Promise<NavGroup[]> {
+  const all = await studentAcademics(user);
+  const until = Date.now() + WEEK_MS;
+  // Per course: open work due within a week (or already overdue but still accepted).
+  const due = (courseId: string) =>
+    all.assignments.filter((a) => a.courseId === courseId && (a.status === "overdue" || (a.status === "to-do" && a.dueAt && Date.parse(a.dueAt) <= until))).length +
+    all.exams.filter((e) => e.courseId === courseId && (e.inProgressId || (e.state === "open" && e.attemptsLeft > 0))).length;
+  return [
+    {
+      items: [
+        { href: "/", label: "Home", exact: true },
+        { href: "/calendar", label: "Calendar" },
+        { href: "/grades", label: "Grades" },
+      ],
+    },
+    {
+      label: "Your courses",
+      items: all.courses.length
+        ? all.courses.map((c) => ({ href: `/courses/${c.id}`, label: c.label, count: due(c.id) }))
+        : [{ href: "/courses", label: "No courses yet" }],
+    },
+  ];
+}
+
+/** The app frame for every role: a sidebar on wide screens, a menu button on narrow ones. */
+function SidebarShell({ user, groups, area, home, children }: { user: CurrentUser; groups: NavGroup[]; area?: string; home: string; children: React.ReactNode }) {
   const name = user.fullName ?? user.email;
-  const area = user.role === "admin" ? "Admin" : "Teaching";
-  const home = user.role === "admin" ? "/admin" : "/teach";
   const wordmark = (
     <Link href={home} className="rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
       <Wordmark area={area} />
@@ -77,7 +102,7 @@ function StaffShell({ user, groups, children }: { user: CurrentUser; groups: Nav
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 items-center gap-3 border-b px-4 print:hidden sm:px-6 lg:hidden">
-          <MobileNav groups={groups} title={`Modus ${area}`} />
+          <MobileNav groups={groups} title={area ? `Modus ${area}` : "Modus"} />
           {wordmark}
           <div className="ml-auto">
             <AccountMenu compact name={name} email={user.email} roleLabel={ROLE_LABELS[user.role]} />
@@ -91,39 +116,18 @@ function StaffShell({ user, groups, children }: { user: CurrentUser; groups: Nav
   );
 }
 
-function StudentShell({ user, children }: { user: CurrentUser; children: React.ReactNode }) {
-  return (
-    <div className="flex min-h-dvh flex-1 flex-col">
-      <SkipLink />
-      <header className="border-b print:hidden">
-        <div className="mx-auto flex h-16 max-w-3xl items-center gap-8 px-4 sm:px-6">
-          <Link href="/" className="rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
-            <Wordmark />
-          </Link>
-          <TopNav
-            items={[
-              { href: "/", label: "Exams", also: "/exams" },
-              { href: "/results", label: "Results" },
-            ]}
-          />
-          <div className="ml-auto">
-            <AccountMenu compact name={user.fullName ?? user.email} email={user.email} roleLabel={ROLE_LABELS[user.role]} />
-          </div>
-        </div>
-      </header>
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 pt-10 pb-20 sm:px-6 sm:pt-16">
-        {children}
-      </main>
-    </div>
-  );
-}
-
-/** Each role gets its own app: a sidebar for staff, a quiet top bar for students. */
+/** Each role gets its own app, in the same frame: its own home, nav and name. */
 export async function AppShell({ user, children }: { user: CurrentUser; children: React.ReactNode }) {
-  if (user.role === "student") return <StudentShell user={user}>{children}</StudentShell>;
+  if (user.role === "student") {
+    return (
+      <SidebarShell user={user} groups={await studentNav(user)} home="/">
+        {children}
+      </SidebarShell>
+    );
+  }
   return (
-    <StaffShell user={user} groups={await staffNav(user)}>
+    <SidebarShell user={user} groups={await staffNav(user)} area={user.role === "admin" ? "Admin" : "Teaching"} home={user.role === "admin" ? "/admin" : "/teach"}>
       {children}
-    </StaffShell>
+    </SidebarShell>
   );
 }

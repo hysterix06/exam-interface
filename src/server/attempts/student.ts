@@ -7,6 +7,9 @@ import { visibility } from "@/engine/attempts/release";
 import { effectiveState } from "@/engine/exam-state";
 import { blueprintSchema, blueprintTopics } from "@/engine/selection/types";
 import type { CurrentUser } from "@/server/auth";
+
+/** Only who is asking matters here, so the API and data export can call these too. */
+type Viewer = Pick<CurrentUser, "id" | "orgId">;
 import { finalizeMany, windowClosed, attemptExpired } from "./take";
 
 async function topicNames(ids: string[]) {
@@ -15,7 +18,7 @@ async function topicNames(ids: string[]) {
   return Object.fromEntries(rows.map((r) => [r.id, r.name]));
 }
 
-async function ownAttempts(user: CurrentUser, rows: { exam: typeof exams.$inferSelect }[]) {
+async function ownAttempts(user: Viewer, rows: { exam: typeof exams.$inferSelect }[]) {
   if (rows.length === 0) return [];
   return db
     .select()
@@ -30,7 +33,7 @@ async function ownAttempts(user: CurrentUser, rows: { exam: typeof exams.$inferS
     .orderBy(desc(attempts.startedAt));
 }
 
-async function describe(user: CurrentUser, rows: { exam: typeof exams.$inferSelect; courseTitle: string }[]) {
+async function describe(user: Viewer, rows: { exam: typeof exams.$inferSelect; courseTitle: string }[]) {
   const names = await topicNames([
     ...new Set(
       rows.flatMap(({ exam }) => {
@@ -64,6 +67,8 @@ async function describe(user: CurrentUser, rows: { exam: typeof exams.$inferSele
       title: exam.title,
       description: exam.description,
       courseTitle,
+      courseId: exam.courseId,
+      categoryId: exam.categoryId,
       state: effectiveState(exam, new Date()),
       opensAt: exam.opensAt?.toISOString() ?? null,
       closesAt: exam.closesAt?.toISOString() ?? null,
@@ -88,7 +93,7 @@ async function describe(user: CurrentUser, rows: { exam: typeof exams.$inferSele
 }
 
 /** Exams a student can see: published ones in courses they're enrolled in. */
-export async function listStudentExams(user: CurrentUser) {
+export async function listStudentExams(user: Viewer) {
   const rows = await db
     .select({ exam: exams, courseTitle: courses.title })
     .from(exams)
@@ -102,7 +107,7 @@ export async function listStudentExams(user: CurrentUser) {
 export type StudentExam = Awaited<ReturnType<typeof listStudentExams>>[number];
 
 /** Courses the student is enrolled in, for the empty state and the header. */
-export async function listStudentCourses(user: CurrentUser) {
+export async function listStudentCourses(user: Viewer) {
   return db
     .select({ id: courses.id, code: courses.code, title: courses.title })
     .from(enrollments)
@@ -110,7 +115,7 @@ export async function listStudentCourses(user: CurrentUser) {
     .where(and(eq(enrollments.userId, user.id), eq(enrollments.role, "student"), isNull(courses.archivedAt)));
 }
 
-export async function getStudentExam(user: CurrentUser, examId: string) {
+export async function getStudentExam(user: Viewer, examId: string) {
   const rows = await db
     .select({ exam: exams, courseTitle: courses.title })
     .from(exams)

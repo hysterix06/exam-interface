@@ -91,3 +91,14 @@ describe("courseGrade", () => {
     expect(g.lines.at(-1)).toMatch(/55\.6%/);
   });
 });
+
+describe("courseGradeExplanation", () => {
+  it("lists what counted, with the final line as the note", async () => {
+    const { courseGradeExplanation } = await import("./course-grade");
+    const g = courseGrade([cat("exams", 50), cat("homework", 50)], [item("e", "exams", 8), item("h", "homework", null)]);
+    const x = courseGradeExplanation(g);
+    expect(x.inputs).toEqual([{ label: "Exams (50%)", value: "80% of 100%" }]);
+    expect(x.note).toMatch(/Course grade: 80%/);
+    expect(courseGradeExplanation(courseGrade([], [])).formula).toMatch(/Points earned/);
+  });
+});

@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, UserRound } from "lucide-react";
+import { DatabaseBackup, LogOut, UserRound } from "lucide-react";
 import Link from "next/link";
 import { signOut } from "@/app/login/actions";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
@@ -42,6 +42,11 @@ export function AccountMenu({ name, email, roleLabel, compact = false }: { name:
         <MenuItem asChild>
           <Link href="/account">
             <UserRound /> Account
+          </Link>
+        </MenuItem>
+        <MenuItem asChild>
+          <Link href="/account/data">
+            <DatabaseBackup /> Your data
           </Link>
         </MenuItem>
         <MenuSeparator />
