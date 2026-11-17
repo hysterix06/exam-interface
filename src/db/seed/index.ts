@@ -16,6 +16,8 @@ import { DEMO_PHONES } from "./demo-phones";
 import { seedPracticeResults } from "./practice";
 import { seedField } from "./field";
 import { seedShowcase } from "./showcase";
+import { seedAcademics } from "./academics";
+import { BIO, CHEM } from "./academics-content";
 
 config({ path: ".env.local" });
 
@@ -236,6 +238,9 @@ async function main() {
   // After the practice results: it reuses their demo students for the marking queue.
   await seedShowcase(db, DEMO_COURSE_ID, author);
   await seedField(db, supabase, DEMO_COURSE_ID, author);
+  // Last: it puts the exams above into grade categories.
+  await seedAcademics(db, DEMO_COURSE_ID, BIO, author);
+  await seedAcademics(db, CHEM_COURSE_ID, CHEM, ids["instructor2@example.com"]);
 
   await client.end();
 }

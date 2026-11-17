@@ -39,7 +39,7 @@ function ItemLine({ item, tz, compact, showCourse }: { item: CalendarItem; tz: s
   const label = (
     <>
       <KindIcon item={item} className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-      <span className="min-w-0">
+      <span className="min-w-0 flex-1">
         <span className={cn("block", compact && "truncate")}>
           {!item.allDay && <span className="text-muted-foreground tabular-nums">{time(item.startsAt, tz)} </span>}
           {PREFIX[item.kind] && <span className="text-muted-foreground">{PREFIX[item.kind]}: </span>}
@@ -53,7 +53,7 @@ function ItemLine({ item, tz, compact, showCourse }: { item: CalendarItem; tz: s
       </span>
     </>
   );
-  const cls = cn("flex gap-1.5 rounded-sm", compact ? "text-xs" : "text-sm");
+  const cls = cn("flex min-w-0 gap-1.5 rounded-sm", compact ? "text-xs" : "text-sm");
   return item.href ? (
     <Link href={item.href} className={cn(cls, "hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none")} title={compact ? item.title : undefined}>
       {label}
@@ -179,14 +179,14 @@ export function CalendarView({
                 const isToday = d.date === today;
                 const list = byDay.get(d.date) ?? [];
                 return (
-                  <div key={d.date} className={cn("min-h-24 border-r p-1.5 last:border-r-0", !d.inMonth && "bg-muted/30")}>
+                  <div key={d.date} className={cn("min-h-24 min-w-0 overflow-hidden border-r p-1.5 last:border-r-0", !d.inMonth && "bg-muted/30")}>
                     <div
                       className={cn("mb-1 px-0.5 text-xs tabular-nums", d.inMonth ? "text-foreground" : "text-muted-foreground", isToday && "font-semibold underline underline-offset-4")}
                       aria-current={isToday ? "date" : undefined}
                     >
                       {Number(d.date.slice(8))}
                     </div>
-                    <ul className="grid gap-1">
+                    <ul className="grid grid-cols-1 gap-1 [&>li]:min-w-0">
                       {list.slice(0, 4).map((i) => (
                         <li key={i.id}>
                           <ItemLine item={i} tz={tz} compact showCourse={showCourse} />
