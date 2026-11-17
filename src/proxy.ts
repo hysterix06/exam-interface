@@ -56,6 +56,7 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // widgets/ are static pages embedded in the exam; a signed-in user must not be redirected away from them.
-    "/((?!_next/static|_next/image|favicon.ico|widgets/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // api/ and feeds/ authenticate with a personal token, not the session cookie, and answer for themselves.
+    "/((?!_next/static|_next/image|favicon.ico|widgets/|api/|feeds/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

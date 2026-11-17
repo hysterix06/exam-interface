@@ -30,6 +30,7 @@
     "codemirror": "^6.0.2",
     "drizzle-orm": "^0.45.4",
     "exceljs": "^4.4.0",
+    "fflate": "0.8.2",
     "hyperformula": "^3.5.0",
     "katex": "^0.19.1",
     "libphonenumber-js": "1.13.15",

@@ -71,6 +71,7 @@ async function studentNav(user: CurrentUser): Promise<NavGroup[]> {
         { href: "/", label: "Home", exact: true },
         { href: "/calendar", label: "Calendar" },
         { href: "/grades", label: "Grades" },
+        { href: "/account/data", label: "Your data" },
       ],
     },
     {
