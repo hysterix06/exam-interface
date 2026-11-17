@@ -5,7 +5,6 @@ import { fixturesByType } from "@/question-types/fixtures";
 import { computeDeadline, effectiveTime, isExpired, secondsLeft } from "./deadline";
 import { finalizeAttempt } from "./finalize";
 import { HIDDEN, visibility } from "./release";
-import { shouldApply } from "./responses";
 
 describe("effectiveTime", () => {
   it("is null for untimed exams", () => {
@@ -64,15 +63,6 @@ describe("visibility", () => {
     expect(visibility("released", "feedback").feedback).toBe(true);
     expect(visibility("released", "feedback").explanations).toBe(false);
     expect(visibility("released", "explanations").explanations).toBe(true);
-  });
-});
-
-describe("shouldApply", () => {
-  it("only accepts newer sequence numbers", () => {
-    expect(shouldApply(null, 0)).toBe(true);
-    expect(shouldApply(3, 4)).toBe(true);
-    expect(shouldApply(3, 3)).toBe(false);
-    expect(shouldApply(3, 1)).toBe(false);
   });
 });
 

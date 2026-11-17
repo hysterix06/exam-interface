@@ -12,7 +12,7 @@ import { writeAudit } from "./audit";
 
 export type ActionResult<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
-export const questionInputSchema = z.object({
+const questionInputSchema = z.object({
   id: z.guid().optional(),
   topicId: z.guid(),
   type: z.string(),
@@ -24,7 +24,6 @@ export const questionInputSchema = z.object({
   groupKey: z.string().trim().min(1).nullable(),
   status: z.enum(["draft", "active", "archived"]),
 });
-export type QuestionInput = z.infer<typeof questionInputSchema>;
 
 /**
  * Create or update a question. Every change to its content writes a new

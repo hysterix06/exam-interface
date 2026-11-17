@@ -19,15 +19,6 @@ export function nextStates(from: ExamStateName) {
   return NEXT[from];
 }
 
-export const STATE_LABELS: Record<ExamStateName, string> = {
-  draft: "Draft",
-  scheduled: "Published, not open",
-  open: "Open",
-  closed: "Closed",
-  graded: "Graded",
-  released: "Results released",
-};
-
 export interface ExamWindow {
   state: ExamStateName;
   opensAt: Date | null;
