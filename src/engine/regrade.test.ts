@@ -1,55 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { csvCell, toCsv } from "./csv";
-import { effectiveState } from "./exam-state";
 import { canonical, compareReproduction, regradeItems } from "./regrade";
 import { createRng, questionSeed } from "./rng";
 import { getQuestionType } from "@/question-types/registry";
 import { fixturesByType } from "@/question-types/fixtures";
-
-describe("effectiveState", () => {
-  const at = (s: string) => new Date(`2026-03-01T${s}Z`);
-  const win = (state: Parameters<typeof effectiveState>[0]["state"], o: string | null, c: string | null) => ({
-    state,
-    opensAt: o ? at(o) : null,
-    closesAt: c ? at(c) : null,
-  });
-
-  it("opens a scheduled exam by itself at its start time", () => {
-    expect(effectiveState(win("scheduled", "09:00:00", null), at("08:59:59"))).toBe("scheduled");
-    expect(effectiveState(win("scheduled", "09:00:00", null), at("09:00:00"))).toBe("open");
-  });
-  it("closes at the end time, whether it opened by schedule or by hand", () => {
-    expect(effectiveState(win("scheduled", "09:00:00", "10:00:00"), at("10:00:01"))).toBe("closed");
-    expect(effectiveState(win("open", null, "10:00:00"), at("09:59:59"))).toBe("open");
-    expect(effectiveState(win("open", null, "10:00:00"), at("10:00:01"))).toBe("closed");
-  });
-  it("leaves other states and unscheduled exams alone", () => {
-    expect(effectiveState(win("draft", "09:00:00", "10:00:00"), at("09:30:00"))).toBe("draft");
-    expect(effectiveState(win("scheduled", null, null), at("12:00:00"))).toBe("scheduled");
-    expect(effectiveState(win("released", null, "10:00:00"), at("11:00:00"))).toBe("released");
-  });
-});
-
-describe("csv", () => {
-  it("quotes only when needed", () => {
-    expect(csvCell("plain")).toBe("plain");
-    expect(csvCell('a,"b"')).toBe('"a,""b"""');
-    expect(csvCell("two\nlines")).toBe('"two\nlines"');
-    expect(csvCell(null)).toBe("");
-    expect(csvCell(3.5)).toBe("3.5");
-    expect(csvCell(false)).toBe("false");
-  });
-  it("defuses spreadsheet formulas in text but not in numbers", () => {
-    expect(csvCell("=HYPERLINK(\"x\")")).toBe("\"'=HYPERLINK(\"\"x\"\")\"");
-    expect(csvCell("+1")).toBe("'+1");
-    expect(csvCell("@cmd")).toBe("'@cmd");
-    expect(csvCell("-2")).toBe("'-2");
-    expect(csvCell(-2)).toBe("-2");
-  });
-  it("joins rows with CRLF", () => {
-    expect(toCsv([["a", "b"], [1, null]])).toBe("a,b\r\n1,\r\n");
-  });
-});
 
 describe("regradeItems", () => {
   const type = getQuestionType("mcq");

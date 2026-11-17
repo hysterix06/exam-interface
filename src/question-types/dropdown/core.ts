@@ -4,7 +4,7 @@ import { defineQuestionType } from "@/engine/question-type";
 import type { PreflightIssue } from "@/engine/types";
 
 // A single-answer choice rendered as a select. Inline dropdowns inside a
-// sentence belong to the cloze type (Phase 4).
+// sentence belong to the cloze type.
 const defSchema = z.object({
   stem: z.string(),
   options: z.array(z.object({ id: z.string().min(1), text: z.string() })),
